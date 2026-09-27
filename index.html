@@ -2,8 +2,13 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="description" content="QIP 2012 — хоррор-игра про старый мессенджер">
+    <meta name="theme-color" content="#0a0000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="QIP 2012">
+    <link rel="manifest" href="manifest.json">
     <title>QIP 2012 — Horror</title>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -23,13 +28,13 @@
 </div>
 
 <!-- ======================================================
-     CUTSCENE (видео-вставки)
+     CUTSCENE
      ====================================================== -->
 <div id="cutscene" class="cutscene hidden">
     <div class="cutscene-stage">
         <div class="cutscene-scene" id="cutscene-scene"></div>
         <div class="cutscene-text" id="cutscene-text"></div>
-        <div class="cutscene-skip" id="cutscene-skip">▶ ПРОПУСТИТЬ</div>
+        <div class="cutscene-skip" id="cutscene-skip" role="button" tabindex="0">▶ ПРОПУСТИТЬ</div>
         <div class="cutscene-progress"><div id="cutscene-progress-fill"></div></div>
     </div>
 </div>
@@ -46,12 +51,13 @@
         <div class="intro-buttons">
             <button id="start-btn" type="button" class="primary-btn">НОВАЯ ИГРА</button>
             <button id="continue-btn" type="button" class="secondary-btn hidden">ПРОДОЛЖИТЬ</button>
-            <button id="coop-btn" type="button" class="secondary-btn">👥 КООП-РЕЖИМ</button>
-            <button id="leaderboard-btn" type="button" class="secondary-btn">🏆 ЛИДЕРБОРД</button>
+            <button id="coop-btn" type="button" class="secondary-btn">👥 КООП</button>
+            <button id="leaderboard-btn" type="button" class="secondary-btn">🏆 РЕЙТИНГ</button>
             <button id="mic-btn" type="button" class="secondary-btn">🎙️ МИКРОФОН</button>
+            <button id="install-btn" type="button" class="secondary-btn hidden">📱 УСТАНОВИТЬ</button>
         </div>
 
-        <div class="intro-tip">🔊 Играй в наушниках. Осторожно: резкие звуки и твой собственный голос.</div>
+        <div class="intro-tip">🔊 Играй в наушниках. Осторожно: резкие звуки и твой голос.</div>
         <div class="intro-stats" id="intro-stats"></div>
         <div class="mic-status" id="mic-status"></div>
     </div>
@@ -78,12 +84,11 @@
 </div>
 
 <!-- ======================================================
-     DESKTOP (ОСНОВНОЙ МИР)
+     DESKTOP
      ====================================================== -->
 <div id="desktop" class="hidden">
     <div id="wallpaper"></div>
 
-    <!-- Карта локаций -->
     <div class="map-view" id="map-view">
         <div class="map-room active" data-room="desk">🖥️ Комната</div>
         <div class="map-room" data-room="kitchen">🍳 Кухня</div>
@@ -92,51 +97,9 @@
         <div class="map-room locked" data-room="basement">🔒 Подвал</div>
     </div>
 
-    <!-- Иконки рабочего стола -->
-    <div class="desktop-icons" id="desktop-icons">
-        <div class="desktop-icon" id="icon-qip" data-room="desk">
-            <div class="icon-img">💬</div>
-            <div class="icon-label">QIP 2012</div>
-        </div>
-        <div class="desktop-icon" id="icon-gallery" data-room="desk">
-            <div class="icon-img">📷</div>
-            <div class="icon-label">Мои фото</div>
-        </div>
-        <div class="desktop-icon" id="icon-notes" data-room="desk">
-            <div class="icon-img">📝</div>
-            <div class="icon-label">Блокнот</div>
-        </div>
-        <div class="desktop-icon" id="icon-browser" data-room="desk">
-            <div class="icon-img">🌐</div>
-            <div class="icon-label">Internet</div>
-        </div>
-        <div class="desktop-icon" id="icon-encyclopedia" data-room="desk">
-            <div class="icon-img">📖</div>
-            <div class="icon-label">Справочник</div>
-        </div>
-        <div class="desktop-icon" id="icon-mine" data-room="desk">
-            <div class="icon-img">💣</div>
-            <div class="icon-label">Сапёр</div>
-        </div>
-        <div class="desktop-icon" id="icon-recycle" data-room="desk">
-            <div class="icon-img">🗑️</div>
-            <div class="icon-label">Корзина</div>
-        </div>
-        <div class="desktop-icon" id="icon-fridge" data-room="kitchen">
-            <div class="icon-img">🧊</div>
-            <div class="icon-label">Холодильник</div>
-        </div>
-        <div class="desktop-icon" id="icon-mirror" data-room="bathroom">
-            <div class="icon-img">🪞</div>
-            <div class="icon-label">Зеркало</div>
-        </div>
-        <div class="desktop-icon" id="icon-door" data-room="hallway">
-            <div class="icon-img">🚪</div>
-            <div class="icon-label">Выход</div>
-        </div>
-    </div>
+    <div class="desktop-icons" id="desktop-icons"></div>
 
-    <!-- ===== QIP WINDOW ===== -->
+    <!-- QIP WINDOW -->
     <div id="qip-window" class="app-window hidden-window">
         <div class="window-header">
             <span>💬 QIP 2012 - [В сети]</span>
@@ -159,7 +122,7 @@
         </div>
     </div>
 
-    <!-- ===== GALLERY ===== -->
+    <!-- GALLERY -->
     <div id="gallery-window" class="app-window hidden-window" style="display:none;">
         <div class="window-header">
             <span>📷 Мои фото</span>
@@ -169,12 +132,10 @@
                 <span class="close" data-target="gallery-window">✕</span>
             </div>
         </div>
-        <div class="gallery-body">
-            <div class="gallery-grid" id="gallery-grid"></div>
-        </div>
+        <div class="gallery-body"><div class="gallery-grid" id="gallery-grid"></div></div>
     </div>
 
-    <!-- ===== NOTES ===== -->
+    <!-- NOTES -->
     <div id="notes-window" class="app-window hidden-window" style="display:none;">
         <div class="window-header">
             <span>📝 Блокнот</span>
@@ -184,12 +145,10 @@
                 <span class="close" data-target="notes-window">✕</span>
             </div>
         </div>
-        <div class="notes-body">
-            <textarea id="notes-text" readonly></textarea>
-        </div>
+        <div class="notes-body"><textarea id="notes-text" readonly></textarea></div>
     </div>
 
-    <!-- ===== BROWSER ===== -->
+    <!-- BROWSER -->
     <div id="browser-window" class="app-window hidden-window" style="display:none;">
         <div class="window-header">
             <span>🌐 Internet Explorer</span>
@@ -208,7 +167,7 @@
         </div>
     </div>
 
-    <!-- ===== ENCYCLOPEDIA ===== -->
+    <!-- ENCYCLOPEDIA -->
     <div id="encyclopedia-window" class="app-window hidden-window" style="display:none;">
         <div class="window-header">
             <span>📖 Справочник</span>
@@ -221,7 +180,7 @@
         <div class="encyclopedia-body" id="encyclopedia-body"></div>
     </div>
 
-    <!-- ===== IMAGE VIEWER ===== -->
+    <!-- IMAGE VIEWER -->
     <div id="image-viewer" class="app-window hidden-window" style="display:none;">
         <div class="window-header">
             <span id="image-title">Просмотр</span>
@@ -232,7 +191,7 @@
         <div class="image-body" id="image-body"></div>
     </div>
 
-    <!-- ===== LEADERBOARD ===== -->
+    <!-- LEADERBOARD -->
     <div id="leaderboard-window" class="app-window hidden-window" style="display:none;">
         <div class="window-header">
             <span>🏆 Лидерборд</span>
@@ -243,13 +202,13 @@
         <div class="leaderboard-body" id="leaderboard-body"></div>
     </div>
 
-    <!-- ===== ROOM VIEW ===== -->
+    <!-- ROOM VIEW -->
     <div class="room-view hidden" id="room-view">
         <div class="room-content" id="room-content"></div>
-        <button class="room-exit" id="room-exit">← НАЗАД К КОМПЬЮТЕРУ</button>
+        <button class="room-exit" id="room-exit" type="button">← НАЗАД К КОМПЬЮТЕРУ</button>
     </div>
 
-    <!-- ===== TASKBAR ===== -->
+    <!-- TASKBAR -->
     <div id="taskbar">
         <div class="start-btn" id="start-btn-desktop"><span class="start-logo">⊞</span> Пуск</div>
         <div class="taskbar-items" id="taskbar-items"></div>
@@ -274,25 +233,14 @@
         <div class="coop-section">
             <div class="coop-label">ТВОЙ КОД:</div>
             <div class="coop-code" id="coop-code">----</div>
-            <button id="coop-copy" class="mini-btn">📋 Скопировать</button>
+            <button id="coop-copy" class="mini-btn" type="button">📋 Скопировать</button>
         </div>
         <div class="coop-section">
             <div class="coop-label">ВОЙТИ ПО КОДУ:</div>
-            <input type="text" id="coop-input" placeholder="XXXX" maxlength="8" style="text-transform:uppercase">
-            <button id="coop-join" class="mini-btn">→ Войти</button>
+            <input type="text" id="coop-input" placeholder="XXXXXX" maxlength="8" autocomplete="off">
+            <button id="coop-join" class="mini-btn" type="button">→ Войти</button>
         </div>
-        <button id="coop-close" class="modal-close-btn">ЗАКРЫТЬ</button>
-    </div>
-</div>
-
-<!-- ======================================================
-     LEADERBOARD MODAL (старая — оставим на всякий)
-     ====================================================== -->
-<div id="leaderboard-modal" class="modal hidden">
-    <div class="modal-box">
-        <div class="modal-title">🏆 ЛИДЕРБОРД</div>
-        <div class="modal-text" id="leaderboard-modal-text">Загрузка...</div>
-        <button id="leaderboard-close" class="modal-close-btn">ЗАКРЫТЬ</button>
+        <button id="coop-close" class="modal-close-btn" type="button">ЗАКРЫТЬ</button>
     </div>
 </div>
 
@@ -347,9 +295,6 @@
     </svg>
 </div>
 
-<!-- ======================================================
-     FADE
-     ====================================================== -->
 <div id="fade-overlay"></div>
 
 <!-- ======================================================
@@ -362,11 +307,11 @@
         <p id="ending-stats"></p>
         <div class="ending-buttons">
             <button id="restart-btn" type="button">НАЧАТЬ ЗАНОВО</button>
-            <button id="leaderboard-after-btn" type="button">🏆 ЛИДЕРБОРД</button>
+            <button id="leaderboard-after-btn" type="button">🏆 РЕЙТИНГ</button>
         </div>
         <div class="ending-name-input" id="ending-name-input">
             <input type="text" id="player-name" placeholder="Твоё имя" maxlength="20">
-            <button id="save-score-btn" type="button">СОХРАНИТЬ РЕЗУЛЬТАТ</button>
+            <button id="save-score-btn" type="button">СОХРАНИТЬ</button>
         </div>
     </div>
 </div>
