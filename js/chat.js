@@ -1,19 +1,15 @@
 /* ============================================================
-   VIDEOCALL — видеочат с фейковыми "людьми"
-   ИСПРАВЛЕНО: зависание "печатает", таймер после финала,
-   сброс глитча, гонки setTimeout
+   VIDEOCALL v5 — голос + текст, гибридный режим
    ============================================================ */
 
 const CHARACTERS = [
     {
-        id: 'alex',
-        name: 'Алекс',
-        status: 'был(а) в сети только что',
+        id: 'alex', name: 'Алекс', status: 'был(а) в сети только что',
         intro: ['Привет. Я тебя вижу.', 'Хорошо, что ты ответил.', 'Ты один?'],
         responses: [
             { keys: ['да', 'yes'], reply: 'Хорошо. Я не люблю, когда смотрят.' },
             { keys: ['нет', 'no'], reply: 'Кто ещё? Покажи мне.' },
-            { keys: ['привет', 'hi'], reply: 'Здравствуй. Хорошо выглядишь. Я смотрю.' },
+            { keys: ['привет', 'hi', 'здравствуй'], reply: 'Здравствуй. Хорошо выглядишь. Я смотрю.' },
             { keys: ['кто', 'who'], reply: 'Я тот, кого ты удалил из друзей. Я вернулся.' },
             { keys: ['что надо', 'чего'], reply: 'Просто посмотреть. Ты против?' },
             { keys: ['уходи', 'bye'], reply: 'Я не могу. Ты не можешь отключиться. Не сейчас.' },
@@ -23,9 +19,7 @@ const CHARACTERS = [
         endingId: 'friend',
     },
     {
-        id: 'maria',
-        name: 'Мария',
-        status: 'печатает...',
+        id: 'maria', name: 'Мария', status: 'печатает...',
         intro: ['Наконец-то.', 'Я так долго ждала тебя.', 'Почему ты удалил меня?'],
         responses: [
             { keys: ['привет', 'hi'], reply: 'Я ждала тебя. Ты знал это.' },
@@ -39,9 +33,7 @@ const CHARACTERS = [
         endingId: 'obsessed',
     },
     {
-        id: 'unknown',
-        name: '░░░░░',
-        status: 'онлайн',
+        id: 'unknown', name: '░░░░░', status: 'онлайн',
         intro: ['...', 'Ты меня видишь?', 'Я тебя — да.'],
         responses: [
             { keys: ['?', 'что'], reply: '░░░░░░░░░░░░' },
@@ -54,9 +46,7 @@ const CHARACTERS = [
         endingId: 'revealed',
     },
     {
-        id: 'nick',
-        name: 'Ник',
-        status: 'был в сети 5 лет назад',
+        id: 'nick', name: 'Ник', status: 'был в сети 5 лет назад',
         intro: ['Ты думал, меня нет.', 'Но я здесь.', 'Я всегда был здесь.'],
         responses: [
             { keys: ['жив', 'живой'], reply: 'Сложный вопрос. Сложный ответ.' },
@@ -81,6 +71,119 @@ const CORRUPTED_LINES = [
     'Твоё окно открыто.',
 ];
 
+class VoiceInput {
+    constructor() {
+        this.recognition = null;
+        this.stream = null;
+        this.audioCtx = null;
+        this.analyser = null;
+        this.rafId = null;
+        this.active = false;
+        this.supported = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+        this.onResult = null;
+        this.onLevel = null;
+        this.onStart = null;
+        this.onEnd = null;
+    }
+
+    async start() {
+        try {
+            this.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        } catch (e) {
+            console.warn('Микрофон недоступен:', e);
+            return { ok: false, reason: 'no-mic' };
+        }
+
+        try {
+            this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const source = this.audioCtx.createMediaStreamSource(this.stream);
+            this.analyser = this.audioCtx.createAnalyser();
+            this.analyser.fftSize = 256;
+            source.connect(this.analyser);
+            this._startLevelLoop();
+        } catch (e) {
+            console.warn('Analyser не создан:', e);
+        }
+
+        if (this.supported) {
+            try {
+                const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+                this.recognition = new SR();
+                this.recognition.lang = 'ru-RU';
+                this.recognition.continuous = true;
+                this.recognition.interimResults = false;
+                this.recognition.maxAlternatives = 1;
+
+                this.recognition.onresult = (event) => {
+                    const last = event.results[event.results.length - 1];
+                    if (last.isFinal) {
+                        const text = last[0].transcript.trim();
+                        if (text) this.onResult?.(text);
+                    }
+                };
+                this.recognition.onerror = (e) => {
+                    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+                        console.warn('Распознавание речи запрещено');
+                        this.active = false;
+                    }
+                };
+                this.recognition.onend = () => {
+                    if (this.active) {
+                        try { this.recognition.start(); } catch (e) {}
+                    }
+                };
+
+                this.active = true;
+                this.recognition.start();
+                this.onStart?.();
+                return { ok: true, hasSpeechRecognition: true };
+            } catch (e) {
+                console.warn('SpeechRecognition не запустился:', e);
+                return { ok: true, hasSpeechRecognition: false };
+            }
+        }
+
+        return { ok: true, hasSpeechRecognition: false };
+    }
+
+    _startLevelLoop() {
+        const data = new Uint8Array(this.analyser.frequencyBinCount);
+        const loop = () => {
+            if (!this.analyser) return;
+            this.analyser.getByteFrequencyData(data);
+            let sum = 0;
+            for (let i = 0; i < data.length; i++) sum += data[i];
+            const avg = sum / data.length;
+            const percent = Math.min(100, (avg / 128) * 100 * 1.8);
+            this.onLevel?.(percent);
+            this.rafId = requestAnimationFrame(loop);
+        };
+        loop();
+    }
+
+    stop() {
+        this.active = false;
+        if (this.recognition) {
+            try { this.recognition.stop(); } catch (e) {}
+            this.recognition = null;
+        }
+        if (this.rafId) cancelAnimationFrame(this.rafId);
+        this.rafId = null;
+        if (this.stream) {
+            this.stream.getTracks().forEach(t => t.stop());
+            this.stream = null;
+        }
+        if (this.audioCtx) {
+            try { this.audioCtx.close(); } catch (e) {}
+            this.audioCtx = null;
+        }
+        this.analyser = null;
+        this.onEnd?.();
+    }
+}
+
+const voiceInput = new VoiceInput();
+
 class VideoChat {
     constructor() {
         this.nameEl = document.getElementById('vc-name');
@@ -92,8 +195,13 @@ class VideoChat {
         this.thinking = document.getElementById('vc-thinking');
         this.subtitle = document.getElementById('vc-subtitle');
         this.nameOverlay = document.getElementById('vc-name-overlay');
+
         this.input = document.getElementById('vc-input');
-        this.micText = document.getElementById('vc-mic-text');
+        this.sendBtn = document.getElementById('vc-send-btn');
+        this.micBar = document.getElementById('vc-mic-bar');
+        this.micLevelFill = document.getElementById('vc-mic-level-fill');
+        this.micStatus = document.getElementById('vc-mic-status');
+        this.modeHint = document.getElementById('vc-mode-hint');
 
         this.btnMute = document.getElementById('vc-mute');
         this.btnCam = document.getElementById('vc-cam');
@@ -106,19 +214,19 @@ class VideoChat {
         this.callTimer = null;
         this.callSeconds = 0;
 
-        // 🆕 ВСЕ таймеры — чтобы точно их очищать
         this.subtitleTimeout = null;
+        this.subtitleHideTimeout = null;
+        this.subtitleTickTimeout = null;
         this.silenceTimeout = null;
         this.introTimeout = null;
         this.replyTimeout = null;
         this.screamTimeout = null;
-        this.glRafId = null;
         this.forceTimeout = null;
+        this.glRafId = null;
 
-        // 🆕 Флаг «сейчас печатает» — чтобы не запускать параллельно
         this.isThinking = false;
-        // 🆕 ID текущей сессии — защита от гонок при рестарте
         this.sessionId = 0;
+        this.voiceEnabled = false;
 
         this.bindEvents();
     }
@@ -127,6 +235,7 @@ class VideoChat {
         this.input.addEventListener('keydown', e => {
             if (e.key === 'Enter') this.handlePlayerMessage();
         });
+        this.sendBtn.addEventListener('click', () => this.handlePlayerMessage());
 
         this.btnHangup.addEventListener('click', () => {
             if (this.completed) return;
@@ -137,7 +246,12 @@ class VideoChat {
 
         this.btnMute.addEventListener('click', () => {
             this.btnMute.classList.toggle('vc-btn-active');
-            if (!this.btnMute.classList.contains('vc-btn-active')) {
+            const active = this.btnMute.classList.contains('vc-btn-active');
+
+            if (active && !this.voiceEnabled) {
+                this.enableVoice();
+            } else if (!active && this.voiceEnabled) {
+                this.disableVoice();
                 this.playSubtitle('Теперь я не слышу тебя. Но вижу.', 2500);
             }
         });
@@ -149,14 +263,145 @@ class VideoChat {
                 horrorAudio.playStinger();
             }
         });
-
-        this.micText.addEventListener('click', () => this.input.focus());
     }
 
-    /* 🆕 Полная очистка ВСЕХ таймеров и флагов */
+    async enableVoice() {
+        this.micStatus.textContent = 'Микрофон: подключение...';
+
+        voiceInput.onResult = (text) => this.handleVoiceInput(text);
+        voiceInput.onLevel = (percent) => {
+            this.micLevelFill.style.width = percent + '%';
+            if (percent > 15 && !this.isThinking && !this.completed) {
+                this.thinking.classList.add('active');
+            } else if (percent <= 15 && !this.isThinking && !this.completed) {
+                this.thinking.classList.remove('active');
+            }
+        };
+
+        const result = await voiceInput.start();
+
+        if (!result.ok) {
+            this.voiceEnabled = false;
+            this.btnMute.classList.remove('vc-btn-active');
+            this.micBar.classList.add('unavailable');
+            this.micStatus.textContent = 'Микрофон: нет доступа';
+            this.modeHint.textContent = '📝 Пиши в поле ниже — я слушаю другим способом.';
+            return;
+        }
+
+        this.voiceEnabled = true;
+        this.micBar.classList.add('listening');
+        this.micBar.classList.remove('unavailable');
+
+        if (result.hasSpeechRecognition) {
+            this.micStatus.textContent = '🎤 Слушаю тебя';
+            this.modeHint.textContent = '🎤 Говори — я слышу. Или пиши.';
+        } else {
+            this.micStatus.textContent = '🎤 Микрофон есть, распознавание не поддерживается';
+            this.modeHint.textContent = '📝 Пиши — браузер не умеет слушать.';
+        }
+    }
+
+    disableVoice() {
+        voiceInput.stop();
+        this.voiceEnabled = false;
+        this.micBar.classList.remove('listening');
+        this.micLevelFill.style.width = '0%';
+        this.micStatus.textContent = 'Микрофон: выключен';
+        this.modeHint.textContent = '📝 Пиши в поле ниже.';
+        this.thinking.classList.remove('active');
+    }
+
+    handleVoiceInput(text) {
+        if (this.completed) return;
+        this.playSubtitle('Ты: ' + text, 1800);
+        horrorAudio.playMessageBlip();
+        this.processPlayerText(text);
+    }
+
+    handlePlayerMessage() {
+        const text = this.input.value.trim();
+        if (!text || this.completed) return;
+        this.input.value = '';
+        horrorAudio.playMessageBlip();
+        this.processPlayerText(text);
+    }
+
+    processPlayerText(text) {
+        if (this.completed) return;
+
+        clearTimeout(this.silenceTimeout);
+        clearTimeout(this.replyTimeout);
+        this.hideThinking();
+        this.isThinking = false;
+
+        this.playerMessagesSent++;
+        memory.addPlayerMessage(text);
+
+        const nameMatch = text.match(/(?:меня зовут|я\s+—\s+|я\s+)([А-ЯЁA-Z][а-яёa-z]+)/i);
+        if (nameMatch) memory.addName(nameMatch[1]);
+
+        const screamTriggers = ['убей', 'смерть', 'die', 'kill', 'ненавижу', 'заткнись', 'fuck'];
+        if (screamTriggers.some(w => text.toLowerCase().includes(w))) {
+            this.playSubtitle('...', 500);
+            const sid = this.sessionId;
+            this.screamTimeout = setTimeout(() => {
+                if (this.sessionId === sid && !this.completed) this.triggerScream('betrayed');
+            }, 800);
+            return;
+        }
+
+        if (/трубк|пока|прощай|bye/i.test(text)) {
+            this.playSubtitle('Ты не можешь уйти. Я уже здесь.', 3000);
+            horrorAudio.playVoiceBubble();
+            this.startSilenceTimer();
+            return;
+        }
+
+        const char = this.activeCharacter;
+        let reply = null;
+        for (const r of char.responses) {
+            if (r.keys.some(k => text.toLowerCase().includes(k))) {
+                reply = r.reply;
+                break;
+            }
+        }
+
+        if (!reply) {
+            if (Math.random() > 0.5) {
+                reply = CORRUPTED_LINES[Math.floor(Math.random() * CORRUPTED_LINES.length)];
+            } else {
+                reply = char.responses[Math.floor(Math.random() * char.responses.length)].reply;
+            }
+        }
+
+        if (this.playerMessagesSent % 4 === 0) {
+            const sid = this.sessionId;
+            this.screamTimeout = setTimeout(() => {
+                if (this.sessionId === sid && !this.completed) this.triggerScream('escalate');
+            }, 1500);
+            return;
+        }
+
+        this.showThinking();
+        this.isThinking = true;
+        const sid = this.sessionId;
+
+        this.replyTimeout = setTimeout(() => {
+            if (this.sessionId !== sid || this.completed) return;
+            this.hideThinking();
+            this.isThinking = false;
+            this.playSubtitle(reply, 3500);
+            horrorAudio.playVoiceBubble();
+            this.startSilenceTimer();
+        }, 1000 + Math.random() * 900);
+    }
+
     clearAllTimers() {
         clearInterval(this.callTimer);
         clearTimeout(this.subtitleTimeout);
+        clearTimeout(this.subtitleHideTimeout);
+        clearTimeout(this.subtitleTickTimeout);
         clearTimeout(this.silenceTimeout);
         clearTimeout(this.introTimeout);
         clearTimeout(this.replyTimeout);
@@ -164,6 +409,8 @@ class VideoChat {
         clearTimeout(this.forceTimeout);
         this.callTimer = null;
         this.subtitleTimeout = null;
+        this.subtitleHideTimeout = null;
+        this.subtitleTickTimeout = null;
         this.silenceTimeout = null;
         this.introTimeout = null;
         this.replyTimeout = null;
@@ -171,8 +418,7 @@ class VideoChat {
         this.forceTimeout = null;
     }
 
-    start(webcamStream) {
-        // 🆕 Новая сессия — все старые таймеры убиваем
+    async start(webcamStream) {
         this.sessionId++;
         this.clearAllTimers();
         this.isThinking = false;
@@ -182,34 +428,43 @@ class VideoChat {
         this.completed = false;
         this.chatEndings = {};
         this.callSeconds = 0;
+        this.voiceEnabled = false;
 
         this.nameEl.textContent = this.activeCharacter.name;
         this.statusEl.textContent = 'соединение...';
         this.statusEl.style.color = '#666';
         this.nameOverlay.textContent = this.activeCharacter.name;
 
-        // 🆕 Сброс UI от прошлой игры
         this.hideThinking();
         this.subtitle.classList.remove('show', 'scream');
         this.subtitle.textContent = '';
         this.input.value = '';
         this.timerEl.textContent = '00:00';
+        this.micLevelFill.style.width = '0%';
+        this.micBar.classList.remove('listening', 'unavailable');
+        this.micStatus.textContent = 'Микрофон: проверка...';
+        this.modeHint.textContent = '🎤 Говори — я слушаю. Или пиши.';
 
         if (webcamStream) {
             this.themVideo.srcObject = webcamStream;
             this.selfVideo.srcObject = webcamStream;
+            Promise.all([
+                this.themVideo.play().catch(() => {}),
+                this.selfVideo.play().catch(() => {}),
+            ]);
         }
 
         this.initGlitchCanvas();
 
-        // 🆕 Таймер звонка — с проверкой флага завершения
         this.callTimer = setInterval(() => {
-            if (this.completed) return;   // не тикает после финала
+            if (this.completed) return;
             this.callSeconds++;
             const m = String(Math.floor(this.callSeconds / 60)).padStart(2, '0');
             const s = String(this.callSeconds % 60).padStart(2, '0');
-            this.timerEl.textContent = `${m}:${s}`;
+            this.timerEl.textContent = m + ':' + s;
         }, 1000);
+
+        this.enableVoice();
 
         const sid = this.sessionId;
         this.introTimeout = setTimeout(() => {
@@ -252,7 +507,6 @@ class VideoChat {
                 horrorAudio.playVoiceBubble();
                 i++;
                 if (i < intro.length) {
-                    // 🆕 было 3200 — слишком долго. Снижаем до 2400
                     this.introTimeout = setTimeout(next, 2400);
                 } else {
                     this.startSilenceTimer();
@@ -267,7 +521,6 @@ class VideoChat {
         if (this.completed) return;
         const sid = this.sessionId;
 
-        // 🆕 было 12 сек → 8 сек, и ждём не 8, а 5
         this.silenceTimeout = setTimeout(() => {
             if (this.sessionId !== sid || this.completed) return;
             if (this.playerMessagesSent === 0) {
@@ -284,115 +537,48 @@ class VideoChat {
         }, 8000);
     }
 
-    handlePlayerMessage() {
-        const text = this.input.value.trim();
-        if (!text || this.completed) return;
+    playSubtitle(text, duration, scream) {
+        if (duration === undefined) duration = 3000;
+        if (scream === undefined) scream = false;
 
-        // 🆕 Отвечая, сбрасываем тишину и прячем «...»
-        clearTimeout(this.silenceTimeout);
-        clearTimeout(this.replyTimeout);
-        this.hideThinking();
-        this.isThinking = false;
-
-        this.input.value = '';
-        this.playerMessagesSent++;
-        memory.addPlayerMessage(text);
-
-        const nameMatch = text.match(/(?:меня зовут|я\s+—\s+|я\s+)([А-ЯЁA-Z][а-яёa-z]+)/i);
-        if (nameMatch) memory.addName(nameMatch[1]);
-
-        const screamTriggers = ['убей', 'смерть', 'die', 'kill', 'ненавижу', 'заткнись', 'fuck'];
-        if (screamTriggers.some(w => text.toLowerCase().includes(w))) {
-            this.playSubtitle('...', 500);
-            const sid = this.sessionId;
-            this.screamTimeout = setTimeout(() => {
-                if (this.sessionId === sid && !this.completed) this.triggerScream('betrayed');
-            }, 800);
-            return;
-        }
-
-        if (/трубк|пока|прощай|bye/i.test(text)) {
-            this.playSubtitle('Ты не можешь уйти. Я уже здесь.', 3000);
-            horrorAudio.playVoiceBubble();
-            this.startSilenceTimer();
-            return;
-        }
-
-        const char = this.activeCharacter;
-        let reply = null;
-        for (const r of char.responses) {
-            if (r.keys.some(k => text.toLowerCase().includes(k))) {
-                reply = r.reply;
-                break;
-            }
-        }
-
-        if (!reply) {
-            if (Math.random() > 0.5) {
-                reply = CORRUPTED_LINES[Math.floor(Math.random() * CORRUPTED_LINES.length)];
-            } else {
-                reply = char.responses[Math.floor(Math.random() * char.responses.length)].reply;
-            }
-        }
-
-        // Каждое 4-е сообщение → скример
-        if (this.playerMessagesSent % 4 === 0) {
-            const sid = this.sessionId;
-            this.screamTimeout = setTimeout(() => {
-                if (this.sessionId === sid && !this.completed) this.triggerScream('escalate');
-            }, 1500);
-            return;
-        }
-
-        // 🆕 Обычный ответ — короткая задержка, без зависания
-        this.showThinking();
-        this.isThinking = true;
-        const sid = this.sessionId;
-
-        this.replyTimeout = setTimeout(() => {
-            if (this.sessionId !== sid || this.completed) return;
-            this.hideThinking();
-            this.isThinking = false;
-            this.playSubtitle(reply, 3500);
-            horrorAudio.playVoiceBubble();
-            this.startSilenceTimer();
-        }, 1000 + Math.random() * 900);   // 🆕 было 1200-2700 → стало 1000-1900
-    }
-
-    playSubtitle(text, duration = 3000, scream = false) {
         clearTimeout(this.subtitleTimeout);
+        clearTimeout(this.subtitleHideTimeout);
+        clearTimeout(this.subtitleTickTimeout);
+
         this.subtitle.classList.add('show');
         this.subtitle.classList.toggle('scream', scream);
 
         if (scream) {
             this.subtitle.textContent = text;
         } else {
-            // 🆕 Печатающийся текст с защитой от перезапуска
             this.subtitle.textContent = '';
-            let i = 0;
             const total = text.length;
             const speed = 40;
+            let i = 0;
+            const sid = this.sessionId;
+
             const tick = () => {
-                if (this.completed && !scream) return;
+                if (this.sessionId !== sid) return;
                 this.subtitle.textContent += text[i] || '';
                 i++;
                 if (i < total) {
-                    this.subtitleTimeout = setTimeout(tick, speed);
+                    this.subtitleTickTimeout = setTimeout(tick, speed);
                 }
             };
             tick();
         }
 
-        // 🆕 Показ — отдельный таймер (не тот же, что печатание)
-        const hideDelay = scream ? duration : Math.max(duration, text.length * 40 + 800);
+        const hideDelay = scream
+            ? duration
+            : Math.max(duration, text.length * 40 + 1200);
+
         const sid = this.sessionId;
-        setTimeout(() => {
+        this.subtitleHideTimeout = setTimeout(() => {
             if (this.sessionId !== sid) return;
             this.subtitle.classList.remove('show', 'scream');
         }, hideDelay);
     }
 
-    /* 🆕 Гарантированное скрытие "печатает" */
     showThinking() {
         this.isThinking = true;
         this.thinking.classList.add('active');
@@ -407,14 +593,22 @@ class VideoChat {
         if (this.completed) return;
         this.completed = true;
 
-        // 🆕 Убиваем ВСЕ таймеры — ничего не должно тикать после скримера
         this.clearAllTimers();
         this.hideThinking();
+
+        if (this.voiceEnabled) {
+            voiceInput.stop();
+            this.voiceEnabled = false;
+            this.micBar.classList.remove('listening');
+            this.micLevelFill.style.width = '0%';
+            this.micStatus.textContent = 'Микрофон: отключён';
+        }
 
         const char = this.activeCharacter;
         const scare = char.scare[Math.floor(Math.random() * char.scare.length)];
 
-        this.chatEndings = { [char.endingId]: true };
+        this.chatEndings = {};
+        this.chatEndings[char.endingId] = true;
         if (type === 'betrayed') this.chatEndings.betrayed = true;
         if (type === 'silent') this.chatEndings.silent = true;
         if (this.playerMessagesSent >= 15) this.chatEndings.obsessed = true;
@@ -428,7 +622,7 @@ class VideoChat {
         const flash = document.createElement('div');
         flash.style.cssText = 'position:fixed;inset:0;background:#ff0000;z-index:200;pointer-events:none;opacity:0.75;';
         document.body.appendChild(flash);
-        setTimeout(() => flash.style.opacity = '0', 400);
+        setTimeout(() => { flash.style.opacity = '0'; }, 400);
         setTimeout(() => flash.remove(), 1200);
 
         const cont = document.querySelector('.videochat-container');
@@ -441,7 +635,7 @@ class VideoChat {
             }
             const dx = (Math.random() - 0.5) * 25;
             const dy = (Math.random() - 0.5) * 25;
-            cont.style.transform = `translate(${dx}px, ${dy}px)`;
+            cont.style.transform = 'translate(' + dx + 'px, ' + dy + 'px)';
             count++;
         }, 45);
 
@@ -450,7 +644,7 @@ class VideoChat {
             if (this.sessionId !== sid) return;
             document.body.classList.remove('glitching');
             memory.completeChat(char.id);
-            this.onComplete?.();
+            if (this.onComplete) this.onComplete();
         }, 3000);
     }
 
@@ -459,35 +653,20 @@ class VideoChat {
         const gl = canvas.getContext('webgl');
         if (!gl) return;
 
-        // 🆕 Пересоздаём размер — вдруг поворот экрана
         canvas.width = canvas.clientWidth || 800;
         canvas.height = canvas.clientHeight || 600;
 
-        const vs = `
-            attribute vec2 pos;
-            varying vec2 vUv;
-            void main() {
-                vUv = pos * 0.5 + 0.5;
-                gl_Position = vec4(pos, 0.0, 1.0);
-            }
-        `;
-        const fs = `
-            precision mediump float;
-            varying vec2 vUv;
-            uniform float uTime;
-            uniform float uIntensity;
-            float rand(vec2 co) {
-                return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
-            }
-            void main() {
-                vec2 uv = vUv;
-                float scan = sin(uv.y * 700.0) * 0.05;
-                float shift = (rand(vec2(floor(uv.y * 60.0), floor(uTime * 12.0))) - 0.5) * uIntensity * 0.1;
-                uv.x += shift;
-                float noise = rand(vec2(uv.x * 100.0, uTime)) * 0.3;
-                gl_FragColor = vec4(noise * uIntensity, 0.0, 0.0, 0.5);
-            }
-        `;
+        const vs = 'attribute vec2 pos; varying vec2 vUv; void main() { vUv = pos * 0.5 + 0.5; gl_Position = vec4(pos, 0.0, 1.0); }';
+        const fs = 'precision mediump float; varying vec2 vUv; uniform float uTime; uniform float uIntensity;' +
+            'float rand(vec2 co) { return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453); }' +
+            'void main() {' +
+            '  vec2 uv = vUv;' +
+            '  float scan = sin(uv.y * 700.0) * 0.05;' +
+            '  float shift = (rand(vec2(floor(uv.y * 60.0), floor(uTime * 12.0))) - 0.5) * uIntensity * 0.1;' +
+            '  uv.x += shift;' +
+            '  float noise = rand(vec2(uv.x * 100.0, uTime)) * 0.3;' +
+            '  gl_FragColor = vec4(noise * uIntensity, 0.0, 0.0, 0.5);' +
+            '}';
 
         const compile = (type, src) => {
             const s = gl.createShader(type);
@@ -517,10 +696,8 @@ class VideoChat {
         const uIntensity = gl.getUniformLocation(program, 'uIntensity');
 
         this.gl = gl;
-        // 🆕 Сброс интенсивности на старте
         this.glIntensity = 0.5;
 
-        // 🆕 Останавливаем старый RAF если был
         if (this.glRafId) cancelAnimationFrame(this.glRafId);
 
         const startTime = performance.now();
@@ -538,14 +715,19 @@ class VideoChat {
         loop();
     }
 
-    forceGlitch(intensity = 1) {
+    forceGlitch(intensity) {
+        if (intensity === undefined) intensity = 1;
         this.glIntensity = Math.min(1.5, intensity * 0.6);
     }
 
     stop() {
-        this.sessionId++;   // 🆕 инвалидируем все отложенные колбэки
+        this.sessionId++;
         this.clearAllTimers();
         this.hideThinking();
+        if (this.voiceEnabled) {
+            voiceInput.stop();
+            this.voiceEnabled = false;
+        }
         if (this.glRafId) cancelAnimationFrame(this.glRafId);
         this.glRafId = null;
         this.gl = null;

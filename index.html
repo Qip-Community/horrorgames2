@@ -116,9 +116,23 @@
                 </div>
             </div>
 
-            <div class="vc-mic-hint">
-                <span id="vc-mic-text">Нажми и говори...</span>
-                <input type="text" id="vc-input" class="vc-input" placeholder="Скажи что-нибудь..." autocomplete="off">
+            <div class="vc-input-panel">
+                <div id="vc-mic-bar" class="vc-mic-bar">
+                    <div class="vc-mic-icon">🎤</div>
+                    <div class="vc-mic-level">
+                        <div id="vc-mic-level-fill" class="vc-mic-level-fill"></div>
+                    </div>
+                    <div id="vc-mic-status" class="vc-mic-status">Микрофон: проверка...</div>
+                </div>
+
+                <div class="vc-text-row">
+                    <input type="text" id="vc-input" class="vc-input" placeholder="Или напиши здесь..." autocomplete="off">
+                    <button id="vc-send-btn" class="vc-send-btn">→</button>
+                </div>
+
+                <div id="vc-mode-hint" class="vc-mode-hint">
+                    🎤 Говори — я слушаю. Или пиши.
+                </div>
             </div>
         </div>
     </div>

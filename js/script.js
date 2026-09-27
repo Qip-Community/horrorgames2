@@ -82,8 +82,8 @@ function buildMessages() {
     const fp = fingerprint.data;
     return [
         { text: 'Я вижу тебя...', delay: 2000 },
-        { text: `Ты в ${fp.timezone.split('/').pop()?.replace(/_/g, ' ')}`, delay: 2200 },
-        { text: `Твой браузер: ${fp.browser}`, delay: 1800 },
+        { text: 'Ты в ' + fp.timezone.split('/').pop().replace(/_/g, ' '), delay: 2200 },
+        { text: 'Твой браузер: ' + fp.browser, delay: 1800 },
         { text: 'Почему ты не улыбаешься?', delay: 2400, requireEmotion: 'not_happy' },
         { text: 'Я знаю, где ты живёшь.', delay: 2200 },
         { text: 'Не оглядывайся.', delay: 2000, stinger: true },
@@ -95,7 +95,8 @@ function buildMessages() {
     ];
 }
 
-function typeMessage(text, callback, speed = 55) {
+function typeMessage(text, callback, speed) {
+    if (speed === undefined) speed = 55;
     messageEl.textContent = '';
     let i = 0;
     const interval = setInterval(() => {
@@ -108,31 +109,33 @@ function typeMessage(text, callback, speed = 55) {
     }, speed);
 }
 
-function randomGlitch(intensity = 1) {
+function randomGlitch(intensity) {
+    if (intensity === undefined) intensity = 1;
     document.body.classList.add('glitching');
     setTimeout(() => document.body.classList.remove('glitching'), 180 * intensity);
     glitchShader.setIntensity(intensity * 0.7);
     if (Math.random() > 0.7) {
         const flash = document.createElement('div');
-        flash.style.cssText = `position:fixed;inset:0;background:#ff0000;opacity:${0.15 + intensity * 0.15};z-index:100;pointer-events:none;`;
+        flash.style.cssText = 'position:fixed;inset:0;background:#ff0000;opacity:' + (0.15 + intensity * 0.15) + ';z-index:100;pointer-events:none;';
         document.body.appendChild(flash);
         setTimeout(() => flash.remove(), 80);
     }
 }
 
-function showFact(text, duration = 2500) {
+function showFact(text, duration) {
+    if (duration === undefined) duration = 2500;
     factPopup.textContent = text;
     factPopup.classList.add('show');
     setTimeout(() => factPopup.classList.remove('show'), duration);
 }
 
 function updateHUD() {
-    hudThreat.textContent = `${Math.floor(state.threat)}%`;
+    hudThreat.textContent = Math.floor(state.threat) + '%';
     const filled = Math.max(1, 5 - Math.floor(state.threat / 25));
     hudSignal.textContent = '●'.repeat(filled) + '○'.repeat(5 - filled);
     hudObject.textContent = faceTracker.faceDetected ? 'ЗАХВАЧЕН' : (state.noCamera ? '—' : 'ПОТЕРЯН');
     if (faceTracker.lastEmotion) {
-        hudEmotion.textContent = emotionsRu[faceTracker.lastEmotion]?.toUpperCase() || '—';
+        hudEmotion.textContent = (emotionsRu[faceTracker.lastEmotion] || '—').toUpperCase();
     }
     const watchers = Math.floor(state.threat / 10) + state.faceDetectedCount;
     hudWatchers.textContent = watchers;
@@ -199,7 +202,7 @@ function runHorrorSequence() {
         typeMessage(msg.text, () => {
             if (Math.random() > 0.6) {
                 const fact = fingerprint.getRandomFact();
-                if (!state.factsShown.includes(fact)) {
+                if (state.factsShown.indexOf(fact) === -1) {
                     state.factsShown.push(fact);
                     showFact(fact);
                 }
@@ -218,10 +221,18 @@ function startChatPhase() {
     horrorAudio.stopHeartbeat();
 
     showScreen('chat');
-    videoChat.start(state.webcamStream);
+
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            videoChat.start(state.webcamStream);
+        });
+    });
 
     videoChat.onComplete = () => {
-        Object.assign(state, videoChat.getState());
+        const s = videoChat.getState();
+        state.chatMessagesSent = s.chatMessagesSent;
+        state.chatCompleted = s.chatCompleted;
+        state.chatEndings = s.chatEndings;
         setTimeout(() => endGame(), 800);
     };
 }
@@ -243,7 +254,7 @@ async function startGame(withCamera) {
     horrorAudio.startDrone();
 
     hudIp.textContent = 'IP: локально';
-    hudBrowser.textContent = `${fingerprint.data.browser} · ${fingerprint.data.os}`;
+    hudBrowser.textContent = fingerprint.data.browser + ' · ' + fingerprint.data.os;
     startClock();
     updateHUD();
 
@@ -273,7 +284,7 @@ async function startGame(withCamera) {
         faceTracker.onFaceFound = () => {
             state.faceDetectedCount++;
             memory.addFaceDetected();
-            statusEl.textContent = `> ОБНАРУЖЕН: ${state.faceDetectedCount} раз`;
+            statusEl.textContent = '> ОБНАРУЖЕН: ' + state.faceDetectedCount + ' раз';
         };
 
         faceTracker.onEmotion = (emotion) => {
@@ -349,20 +360,20 @@ function endGame() {
     }
 
     const seconds = Math.floor((Date.now() - state.startTime) / 1000);
-    const topEmotion = Object.entries(state.emotions).sort((a, b) => b[1] - a[1])[0]?.[0];
+    const emotionEntries = Object.entries(state.emotions).sort((a, b) => b[1] - a[1]);
+    const topEmotion = emotionEntries[0] ? emotionEntries[0][0] : null;
     const emotionRu = emotionsRu[topEmotion] || '—';
 
-    endStats.innerHTML = `
-        <div>Концовка: <span class="red">${ending.id}</span></div>
-        <div>⏱ Время: <span class="red">${seconds} сек</span></div>
-        <div>👁 Лицо: <span class="red">${state.faceDetectedCount} раз</span></div>
-        <div>💀 Потеря: <span class="red">${state.faceLostCount} раз</span></div>
-        <div>🔥 Угроза: <span class="red">${state.threat}%</span></div>
-        <div>💬 Сообщений в чате: <span class="red">${state.chatMessagesSent}</span></div>
-        ${topEmotion ? `<div>💭 Ты ${emotionRu}</div>` : ''}
-        <div>📊 Визитов: <span class="red">${memory.data.visits}</span></div>
-        <div>🏁 Концовок: <span class="red">${memory.data.endings.length} / ${Object.keys(ENDINGS).length}</span></div>
-    `;
+    endStats.innerHTML =
+        '<div>Концовка: <span class="red">' + ending.id + '</span></div>' +
+        '<div>⏱ Время: <span class="red">' + seconds + ' сек</span></div>' +
+        '<div>👁 Лицо: <span class="red">' + state.faceDetectedCount + ' раз</span></div>' +
+        '<div>💀 Потеря: <span class="red">' + state.faceLostCount + ' раз</span></div>' +
+        '<div>🔥 Угроза: <span class="red">' + state.threat + '%</span></div>' +
+        '<div>💬 Сообщений в чате: <span class="red">' + state.chatMessagesSent + '</span></div>' +
+        (topEmotion ? '<div>💭 Ты ' + emotionRu + '</div>' : '') +
+        '<div>📊 Визитов: <span class="red">' + memory.data.visits + '</span></div>' +
+        '<div>🏁 Концовок: <span class="red">' + memory.data.endings.length + ' / ' + Object.keys(ENDINGS).length + '</span></div>';
 
     setTimeout(() => {
         showScreen('end');
