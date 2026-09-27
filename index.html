@@ -74,41 +74,61 @@
         <div id="fact-popup" class="fact-popup"></div>
     </div>
 
-    <!-- ЭКРАН 4: ВИДЕОЧАТ -->
+    <!-- ЭКРАН 4: СЦЕНА — 4 ЛЮДЕЙ + ПРИЗРАК -->
     <div id="screen-chat" class="screen">
         <div class="videochat-container">
 
             <div class="videochat-header">
                 <span class="live-dot"></span>
-                <span id="vc-name">—</span>
+                <span id="vc-name">████████</span>
                 <span id="vc-status" class="vc-status">соединение...</span>
                 <span id="vc-timer" class="vc-timer">00:00</span>
             </div>
 
             <div class="videochat-main">
-                <video id="webcam-them" autoplay playsinline muted></video>
-                <canvas id="vc-glitch-canvas"></canvas>
+
+                <!-- СЕТКА 2x2 — 4 "участника" -->
+                <div class="grid-4">
+                    <div class="grid-cell" data-cell="0">
+                        <canvas class="ghost-canvas"></canvas>
+                        <div class="cell-label">░░░░░</div>
+                    </div>
+                    <div class="grid-cell" data-cell="1">
+                        <canvas class="ghost-canvas"></canvas>
+                        <div class="cell-label">░░░░░</div>
+                    </div>
+                    <div class="grid-cell" data-cell="2">
+                        <canvas class="ghost-canvas"></canvas>
+                        <div class="cell-label">░░░░░</div>
+                    </div>
+                    <div class="grid-cell" data-cell="3">
+                        <canvas class="ghost-canvas"></canvas>
+                        <div class="cell-label">░░░░░</div>
+                    </div>
+                </div>
+
+                <!-- Твоя камера в углу + призрак за спиной -->
+                <div class="self-view-corner">
+                    <video id="ghost-behind" autoplay playsinline muted></video>
+                    <video id="webcam-self" autoplay playsinline muted></video>
+                    <div class="self-label-corner">ТЫ</div>
+                    <div class="self-rec-corner">● REC</div>
+                </div>
+
+                <!-- Помехи -->
                 <div class="vc-static"></div>
                 <div class="vc-scanlines"></div>
 
+                <!-- Индикатор "печатают" -->
                 <div id="vc-thinking" class="vc-thinking">
                     <span>.</span><span>.</span><span>.</span>
                 </div>
 
+                <!-- Субтитры -->
                 <div id="vc-subtitle" class="vc-subtitle"></div>
-
-                <div class="vc-label">
-                    <span id="vc-name-overlay">░░░░░</span>
-                </div>
             </div>
 
             <div class="videochat-bottom">
-                <div class="vc-self">
-                    <video id="webcam-self" autoplay playsinline muted></video>
-                    <div class="vc-self-label">ТЫ</div>
-                    <div class="vc-self-rec">● REC</div>
-                </div>
-
                 <div class="vc-controls">
                     <button id="vc-mute" class="vc-btn vc-btn-active" title="Микрофон">🎤</button>
                     <button id="vc-cam" class="vc-btn vc-btn-active" title="Камера">📷</button>
@@ -126,12 +146,12 @@
                 </div>
 
                 <div class="vc-text-row">
-                    <input type="text" id="vc-input" class="vc-input" placeholder="Или напиши здесь..." autocomplete="off">
+                    <input type="text" id="vc-input" class="vc-input" placeholder="Скажи что-нибудь..." autocomplete="off">
                     <button id="vc-send-btn" class="vc-send-btn">→</button>
                 </div>
 
                 <div id="vc-mode-hint" class="vc-mode-hint">
-                    🎤 Говори — я слушаю. Или пиши.
+                    🎤 Говори — они слышат (но не отвечают).
                 </div>
             </div>
         </div>

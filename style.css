@@ -265,7 +265,7 @@ body.glitching { animation: body-glitch 0.15s infinite; }
 }
 .blood-overlay.active { opacity: 1; }
 
-/* ============ ВИДЕОЧАТ ============ */
+/* ============ СЦЕНА 4 ЛЮДЕЙ + ПРИЗРАК ============ */
 .videochat-container {
     position: absolute; inset: 0;
     display: flex; flex-direction: column;
@@ -296,26 +296,129 @@ body.glitching { animation: body-glitch 0.15s infinite; }
     flex: 1; position: relative;
     overflow: hidden; background: #050000;
 }
-.videochat-main video {
+
+/* Сетка 2x2 */
+.grid-4 {
+    position: absolute; inset: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 2px;
+    background: #000;
+    z-index: 1;
+}
+.grid-cell {
+    position: relative;
+    overflow: hidden;
+    background: #050000;
+    border: 1px solid #1a0000;
+}
+.ghost-canvas {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.cell-label {
+    position: absolute; bottom: 6px; left: 8px;
+    padding: 2px 8px;
+    background: rgba(0, 0, 0, 0.7);
+    color: #ff4444;
+    font-size: 0.7rem;
+    letter-spacing: 2px;
+    border-left: 2px solid #ff2222;
+}
+.grid-cell::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.75) 90%);
+    pointer-events: none;
+    z-index: 3;
+}
+
+/* Разные фильтры для каждой ячейки */
+.grid-cell[data-cell="0"] .ghost-canvas {
+    filter: grayscale(1) contrast(1.8) brightness(0.5) hue-rotate(-15deg);
+    transform: scaleX(-1) scale(1.05);
+}
+.grid-cell[data-cell="1"] .ghost-canvas {
+    filter: grayscale(1) contrast(1.5) brightness(0.45) hue-rotate(10deg) blur(0.6px);
+    transform: scaleX(-1) scale(1.15) translateY(5%);
+}
+.grid-cell[data-cell="2"] .ghost-canvas {
+    filter: grayscale(1) contrast(2) brightness(0.4) hue-rotate(-30deg);
+    transform: scaleX(-1) scale(0.95) translateX(-3%);
+}
+.grid-cell[data-cell="3"] .ghost-canvas {
+    filter: grayscale(1) contrast(1.6) brightness(0.55) hue-rotate(20deg) blur(0.4px);
+    transform: scaleX(-1) scale(1.1) translateY(-4%);
+}
+
+/* Своё окно в углу */
+.self-view-corner {
+    position: absolute;
+    bottom: 15px; left: 15px;
+    width: 140px; height: 100px;
+    border: 1px solid #550000;
+    overflow: hidden;
+    z-index: 10;
+    background: #000;
+}
+.self-view-corner #webcam-self {
+    position: absolute; inset: 0;
     width: 100%; height: 100%;
     object-fit: cover;
     transform: scaleX(-1);
-    filter: grayscale(1) contrast(2.2) brightness(0.35) blur(1px) hue-rotate(-20deg);
-}
-#vc-glitch-canvas {
-    position: absolute; inset: 0;
-    width: 100%; height: 100%;
-    pointer-events: none;
-    mix-blend-mode: screen;
-    opacity: 0.5;
+    filter: grayscale(1) contrast(1.4) brightness(0.6);
     z-index: 2;
 }
+.self-label-corner {
+    position: absolute; bottom: 3px; left: 5px;
+    font-size: 0.6rem; color: #ff4444;
+    z-index: 4; letter-spacing: 1px;
+}
+.self-rec-corner {
+    position: absolute; top: 3px; right: 5px;
+    font-size: 0.55rem; color: #ff0000;
+    z-index: 4; letter-spacing: 1px;
+    animation: live-pulse 1s infinite;
+}
+
+/* ПРИЗРАК ЗА СПИНОЙ */
+#ghost-behind {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1) scale(1.15);
+    filter: grayscale(1) contrast(0.5) brightness(1.6) blur(4px);
+    opacity: 0;
+    z-index: 1;
+    transition: opacity 2.5s ease-in;
+    pointer-events: none;
+}
+#ghost-behind.visible {
+    opacity: 0.35;
+    animation: ghost-flicker 3s infinite;
+}
+#ghost-behind.angry {
+    opacity: 0.75;
+    filter: grayscale(1) contrast(1.6) brightness(1.5) blur(1.5px);
+    animation: ghost-flicker 0.4s infinite;
+}
+@keyframes ghost-flicker {
+    0%, 100% { opacity: 0.35; }
+    20% { opacity: 0.2; }
+    50% { opacity: 0.5; }
+    70% { opacity: 0.28; }
+}
+
+/* Помехи */
 .vc-static {
     position: absolute; inset: 0;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 300 300' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
-    opacity: 0.25;
+    opacity: 0.18;
     animation: static-jitter 0.15s infinite;
-    z-index: 3; pointer-events: none;
+    z-index: 5; pointer-events: none;
 }
 @keyframes static-jitter {
     0% { transform: translate(0, 0); }
@@ -329,21 +432,23 @@ body.glitching { animation: body-glitch 0.15s infinite; }
     background: repeating-linear-gradient(0deg,
         rgba(0,0,0,0.5), rgba(0,0,0,0.5) 2px,
         transparent 2px, transparent 4px);
-    pointer-events: none; z-index: 4;
+    pointer-events: none; z-index: 6;
     animation: scan 4s linear infinite;
 }
+
+/* Субтитры */
 .vc-subtitle {
-    position: absolute; bottom: 40px; left: 50%;
+    position: absolute; bottom: 30px; left: 50%;
     transform: translateX(-50%);
     max-width: 85%;
-    background: rgba(0,0,0,0.8);
+    background: rgba(0,0,0,0.85);
     border-left: 3px solid #ff2222;
     padding: 10px 20px;
     color: #ff4444;
     font-size: clamp(0.9rem, 2vw, 1.3rem);
     letter-spacing: 1px;
     text-shadow: 0 0 10px #ff0000;
-    z-index: 6; opacity: 0;
+    z-index: 8; opacity: 0;
     transition: opacity 0.3s;
     text-align: center;
     min-height: 1.5em; line-height: 1.4;
@@ -351,21 +456,25 @@ body.glitching { animation: body-glitch 0.15s infinite; }
 .vc-subtitle.show { opacity: 1; }
 .vc-subtitle.scream {
     background: #660000; color: #fff;
-    font-size: clamp(1.2rem, 4vw, 2rem);
+    font-size: clamp(1.3rem, 4vw, 2rem);
     font-weight: bold; letter-spacing: 4px;
-    animation: scream-shake 0.3s;
 }
 @keyframes scream-shake {
     0%, 100% { transform: translateX(-50%); }
     25% { transform: translateX(calc(-50% - 8px)); }
     75% { transform: translateX(calc(-50% + 8px)); }
 }
+.vc-subtitle.scream {
+    animation: scream-shake 0.3s infinite;
+}
+
+/* Индикатор "печатают" */
 .vc-thinking {
     position: absolute; top: 20px; right: 20px;
     display: none; gap: 4px;
     padding: 6px 12px;
     background: rgba(0,0,0,0.7);
-    border-radius: 20px; z-index: 6;
+    border-radius: 20px; z-index: 8;
 }
 .vc-thinking.active { display: flex; }
 .vc-thinking span {
@@ -378,43 +487,14 @@ body.glitching { animation: body-glitch 0.15s infinite; }
     0%, 60%, 100% { opacity: 0.2; }
     30% { opacity: 1; }
 }
-.vc-label {
-    position: absolute; bottom: 20px; left: 20px;
-    padding: 6px 14px;
-    background: rgba(0,0,0,0.7);
-    border-left: 3px solid #ff2222;
-    color: #ff2222;
-    font-size: 0.85rem; letter-spacing: 2px;
-    z-index: 6;
-}
+
+/* Нижняя панель */
 .videochat-bottom {
     display: flex; align-items: center;
-    justify-content: space-between;
-    gap: 15px; padding: 15px;
+    justify-content: center;
+    gap: 15px; padding: 12px;
     background: rgba(0,0,0,0.95);
     border-top: 1px solid #220000;
-}
-.vc-self {
-    position: relative;
-    width: 140px; height: 100px;
-    border: 1px solid #550000;
-    overflow: hidden;
-}
-.vc-self video {
-    width: 100%; height: 100%;
-    object-fit: cover;
-    transform: scaleX(-1);
-    filter: grayscale(1) contrast(1.5) brightness(0.6);
-}
-.vc-self-label {
-    position: absolute; bottom: 4px; left: 6px;
-    font-size: 0.65rem; color: #ff4444; letter-spacing: 1px;
-}
-.vc-self-rec {
-    position: absolute; top: 4px; right: 6px;
-    font-size: 0.6rem; color: #ff0000;
-    letter-spacing: 1px;
-    animation: live-pulse 1s infinite;
 }
 .vc-controls { display: flex; gap: 10px; }
 .vc-btn {
@@ -447,17 +527,17 @@ body.glitching { animation: body-glitch 0.15s infinite; }
     box-shadow: 0 0 25px #ff0000;
 }
 
-/* === ГИБРИДНЫЙ ВВОД === */
+/* Инпут */
 .vc-input-panel {
     position: absolute;
-    bottom: 130px;
+    bottom: 100px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
     flex-direction: column;
     gap: 8px;
     align-items: center;
-    z-index: 7;
+    z-index: 9;
     width: min(92%, 460px);
 }
 .vc-mic-bar {
@@ -482,7 +562,6 @@ body.glitching { animation: body-glitch 0.15s infinite; }
 .vc-mic-icon {
     font-size: 1.2rem;
     filter: grayscale(0.7);
-    transition: filter 0.3s;
 }
 .vc-mic-bar.listening .vc-mic-icon {
     filter: grayscale(0) drop-shadow(0 0 8px #ff0000);
@@ -527,7 +606,6 @@ body.glitching { animation: body-glitch 0.15s infinite; }
     padding: 10px 15px;
     font-family: inherit;
     font-size: 0.9rem;
-    letter-spacing: 0.5px;
     outline: none;
     transition: all 0.3s;
 }
@@ -543,7 +621,6 @@ body.glitching { animation: body-glitch 0.15s infinite; }
     color: #ff4444;
     font-family: inherit;
     font-size: 1rem;
-    letter-spacing: 1px;
     cursor: pointer;
     transition: all 0.3s;
 }
@@ -597,9 +674,9 @@ body.glitching { animation: body-glitch 0.15s infinite; }
     .fact-popup { font-size: 0.9rem; padding: 15px 20px; }
     .tab-warning { font-size: 1.4rem; }
     .videochat-header { padding: 8px 12px; font-size: 0.75rem; }
-    .vc-self { width: 100px; height: 75px; }
+    .self-view-corner { width: 100px; height: 75px; bottom: 10px; left: 10px; }
     .vc-btn { width: 42px; height: 42px; font-size: 1rem; }
-    .vc-subtitle { font-size: 0.85rem; padding: 8px 12px; bottom: 20px; }
-    .vc-label { font-size: 0.7rem; padding: 4px 10px; bottom: 10px; left: 10px; }
-    .vc-input-panel { bottom: 110px; }
+    .vc-subtitle { font-size: 0.85rem; padding: 8px 12px; bottom: 15px; }
+    .vc-input-panel { bottom: 85px; }
+    .cell-label { font-size: 0.6rem; }
 }

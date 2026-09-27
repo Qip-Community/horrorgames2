@@ -370,7 +370,7 @@ function endGame() {
         '<div>👁 Лицо: <span class="red">' + state.faceDetectedCount + ' раз</span></div>' +
         '<div>💀 Потеря: <span class="red">' + state.faceLostCount + ' раз</span></div>' +
         '<div>🔥 Угроза: <span class="red">' + state.threat + '%</span></div>' +
-        '<div>💬 Сообщений в чате: <span class="red">' + state.chatMessagesSent + '</span></div>' +
+        '<div>💬 Сообщений: <span class="red">' + state.chatMessagesSent + '</span></div>' +
         (topEmotion ? '<div>💭 Ты ' + emotionRu + '</div>' : '') +
         '<div>📊 Визитов: <span class="red">' + memory.data.visits + '</span></div>' +
         '<div>🏁 Концовок: <span class="red">' + memory.data.endings.length + ' / ' + Object.keys(ENDINGS).length + '</span></div>';
