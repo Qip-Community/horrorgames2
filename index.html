@@ -12,6 +12,7 @@
         <h1 class="glitch" data-text="Ты уверен?">Ты уверен?</h1>
         <p class="subtitle">Некоторые вещи лучше не открывать.</p>
         <button id="btn-start" class="creepy-btn">Я готов</button>
+        <p class="hint">🔊 Включи звук. Разреши камеру. Не оглядывайся.</p>
     </div>
 
     <!-- Экран 2: Разрешение камеры -->
@@ -37,24 +38,35 @@
             <div class="noise"></div>
         </div>
 
+        <!-- Оверлей с распознаванием лиц -->
+        <canvas id="face-canvas"></canvas>
+
         <div id="message-container">
             <p id="message" class="message-text"></p>
+            <p id="status" class="status-text"></p>
         </div>
 
-        <canvas id="eye-canvas"></canvas>
-
-        <audio id="whisper" loop>
-            <!-- можешь добавить свой звук шепота: <source src="whisper.mp3" type="audio/mpeg"> -->
-        </audio>
+        <!-- Прогресс-бар "времени до конца" -->
+        <div id="timer-bar"><div id="timer-fill"></div></div>
     </div>
 
     <!-- Экран 4: Финал -->
     <div id="screen-end" class="screen">
         <h1 class="glitch" data-text="Я тебя запомнил">Я тебя запомнил</h1>
         <p class="subtitle">До следующего раза...</p>
+        <p id="end-stats" class="stats"></p>
         <button id="btn-restart" class="creepy-btn">Начать заново</button>
     </div>
 
+    <!-- Загрузка моделей -->
+    <div id="loader" class="loader">
+        <p>Загрузка моделей распознавания...</p>
+        <div class="loader-bar"><div id="loader-fill"></div></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <script src="audio.js"></script>
+    <script src="face.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
