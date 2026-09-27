@@ -3,21 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>QIP 2012</title>
+    <title>QIP 2012 — Horror</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<!-- ===== BOOT SCREEN (Windows XP) ===== -->
+<!-- ===== BOOT SCREEN ===== -->
 <div id="boot-screen" class="boot-screen">
     <div class="boot-logo">
         <div class="win-logo">⊞</div>
         <div class="win-text">Microsoft<sup>®</sup> Windows<sup>®</sup> XP</div>
         <div class="win-sub">Professional</div>
     </div>
-    <div class="boot-bar">
-        <div class="boot-bar-fill"></div>
-    </div>
+    <div class="boot-bar"><div class="boot-bar-fill"></div></div>
     <div class="boot-copyright">Copyright © Microsoft Corporation</div>
 </div>
 
@@ -27,20 +25,56 @@
         <h1 class="glitch-title" data-text="QIP 2012">QIP 2012</h1>
         <p class="intro-sub">Ты помнишь этот мессенджер?</p>
         <p class="intro-warn">Иногда лучше не заходить в сеть...</p>
-        <button id="start-btn" type="button">ВОЙТИ В СЕТЬ</button>
-        <div class="intro-tip">🔊 Играй в наушниках. Осторожно: резкие звуки.</div>
+
+        <div class="intro-buttons">
+            <button id="start-btn" type="button" class="primary-btn">НОВАЯ ИГРА</button>
+            <button id="continue-btn" type="button" class="secondary-btn hidden">ПРОДОЛЖИТЬ</button>
+            <button id="mic-btn" type="button" class="secondary-btn">🎙️ РАЗРЕШИТЬ МИКРОФОН</button>
+        </div>
+
+        <div class="intro-tip">🔊 Играй в наушниках. Осторожно: резкие звуки и твой собственный голос.</div>
+        <div class="intro-stats" id="intro-stats"></div>
+        <div class="mic-status" id="mic-status"></div>
     </div>
+</div>
+
+<!-- ===== HUD ===== -->
+<div id="hud" class="hud hidden">
+    <div class="hud-act" id="hud-act">АКТ I — ПРОБУЖДЕНИЕ</div>
+    <div class="hud-objective" id="hud-objective">Цель: осмотреться</div>
+    <div class="hud-timer" id="hud-timer">00:00:00</div>
+    <div class="hud-sanity">
+        <div class="sanity-label">РАССУДОК</div>
+        <div class="sanity-bar"><div class="sanity-fill" id="sanity-fill" style="width:100%"></div></div>
+    </div>
+    <div class="hud-eye" id="hud-eye">👁️</div>
+    <div class="hud-inventory" id="hud-inventory"></div>
 </div>
 
 <!-- ===== DESKTOP ===== -->
 <div id="desktop" class="hidden">
     <div id="wallpaper"></div>
 
-    <!-- Иконки рабочего стола -->
     <div class="desktop-icons">
         <div class="desktop-icon" id="icon-qip">
             <div class="icon-img">💬</div>
             <div class="icon-label">QIP 2012</div>
+        </div>
+        <div class="desktop-icon" id="icon-gallery">
+            <div class="icon-img">📷</div>
+            <div class="icon-label">Мои фото</div>
+        </div>
+        <div class="desktop-icon" id="icon-notes">
+            <div class="icon-img">📝</div>
+            <div class="icon-label">Блокнот</div>
+        </div>
+        <div class="desktop-icon" id="icon-browser">
+            <div class="icon-img">🌐</div>
+            <div class="icon-label">Internet</div>
+        </div>
+        <div class="desktop-icon" id="icon-encyclopedia">
+            <div class="icon-img">📖</div>
+            <div class="icon-label">Википедия</div>
         </div>
         <div class="desktop-icon" id="icon-mine">
             <div class="icon-img">💣</div>
@@ -52,42 +86,20 @@
         </div>
     </div>
 
-    <!-- Окно QIP -->
-    <div id="qip-window" class="hidden-window">
-        <div class="window-header" id="qip-header">
+    <!-- ===== QIP WINDOW ===== -->
+    <div id="qip-window" class="app-window hidden-window">
+        <div class="window-header">
             <span>💬 QIP 2012 - [В сети]</span>
             <div class="window-controls">
-                <span class="min">—</span>
+                <span class="min" data-target="qip-window">—</span>
                 <span class="max">□</span>
-                <span class="close" id="qip-close">✕</span>
+                <span class="close" data-target="qip-window">✕</span>
             </div>
         </div>
         <div class="qip-body">
-            <div class="contacts" id="contacts">
-                <div class="contact active" data-user="admin">
-                    <div class="avatar">👤</div>
-                    <div class="info">
-                        <div class="name">Администратор</div>
-                        <div class="status">в сети</div>
-                    </div>
-                </div>
-                <div class="contact" data-user="masha">
-                    <div class="avatar">💁</div>
-                    <div class="info">
-                        <div class="name">Маша</div>
-                        <div class="status">в сети</div>
-                    </div>
-                </div>
-                <div class="contact" data-user="unknown">
-                    <div class="avatar">❓</div>
-                    <div class="info">
-                        <div class="name">???</div>
-                        <div class="status offline">не в сети</div>
-                    </div>
-                </div>
-            </div>
+            <div class="contacts" id="contacts"></div>
             <div class="chat">
-                <div class="chat-header" id="chat-header">Чат с Администратор</div>
+                <div class="chat-header" id="chat-header">Чат</div>
                 <div class="messages" id="messages"></div>
                 <div class="input-area">
                     <input type="text" id="message-input" placeholder="Введите сообщение..." maxlength="200" autocomplete="off">
@@ -97,14 +109,83 @@
         </div>
     </div>
 
-    <!-- Taskbar -->
+    <!-- ===== GALLERY ===== -->
+    <div id="gallery-window" class="app-window hidden-window" style="display:none;">
+        <div class="window-header">
+            <span>📷 Мои фото</span>
+            <div class="window-controls">
+                <span class="min" data-target="gallery-window">—</span>
+                <span class="max">□</span>
+                <span class="close" data-target="gallery-window">✕</span>
+            </div>
+        </div>
+        <div class="gallery-body">
+            <div class="gallery-grid" id="gallery-grid"></div>
+        </div>
+    </div>
+
+    <!-- ===== NOTES ===== -->
+    <div id="notes-window" class="app-window hidden-window" style="display:none;">
+        <div class="window-header">
+            <span>📝 Блокнот</span>
+            <div class="window-controls">
+                <span class="min" data-target="notes-window">—</span>
+                <span class="max">□</span>
+                <span class="close" data-target="notes-window">✕</span>
+            </div>
+        </div>
+        <div class="notes-body">
+            <textarea id="notes-text" readonly></textarea>
+        </div>
+    </div>
+
+    <!-- ===== BROWSER ===== -->
+    <div id="browser-window" class="app-window hidden-window" style="display:none;">
+        <div class="window-header">
+            <span>🌐 Internet Explorer</span>
+            <div class="window-controls">
+                <span class="min" data-target="browser-window">—</span>
+                <span class="max">□</span>
+                <span class="close" data-target="browser-window">✕</span>
+            </div>
+        </div>
+        <div class="browser-body">
+            <div class="browser-url">
+                <input type="text" id="browser-url" value="http://qip.ru" readonly>
+                <button type="button">→</button>
+            </div>
+            <div class="browser-content" id="browser-content"></div>
+        </div>
+    </div>
+
+    <!-- ===== ENCYCLOPEDIA ===== -->
+    <div id="encyclopedia-window" class="app-window hidden-window" style="display:none;">
+        <div class="window-header">
+            <span>📖 Справочник</span>
+            <div class="window-controls">
+                <span class="min" data-target="encyclopedia-window">—</span>
+                <span class="max">□</span>
+                <span class="close" data-target="encyclopedia-window">✕</span>
+            </div>
+        </div>
+        <div class="encyclopedia-body" id="encyclopedia-body"></div>
+    </div>
+
+    <!-- ===== IMAGE VIEWER ===== -->
+    <div id="image-viewer" class="app-window hidden-window" style="display:none;">
+        <div class="window-header">
+            <span id="image-title">Просмотр</span>
+            <div class="window-controls">
+                <span class="close" data-target="image-viewer">✕</span>
+            </div>
+        </div>
+        <div class="image-body" id="image-body"></div>
+    </div>
+
+    <!-- ===== TASKBAR ===== -->
     <div id="taskbar">
-        <div class="start-btn" id="start-btn-desktop">
-            <span class="start-logo">⊞</span> Пуск
-        </div>
-        <div class="taskbar-items">
-            <div class="taskbar-item" id="taskbar-qip">💬 QIP 2012</div>
-        </div>
+        <div class="start-btn" id="start-btn-desktop"><span class="start-logo">⊞</span> Пуск</div>
+        <div class="taskbar-items" id="taskbar-items"></div>
         <div class="tray">
             <span id="tray-icon">🔊</span>
             <span class="clock" id="clock">22:13</span>
@@ -112,14 +193,47 @@
     </div>
 </div>
 
-<!-- ===== GLITCH / VISUAL FX ===== -->
+<!-- ===== ACHIEVEMENT ===== -->
+<div id="achievement" class="achievement hidden">
+    <div class="achievement-icon">🏆</div>
+    <div class="achievement-info">
+        <div class="achievement-title">ДОСТИЖЕНИЕ</div>
+        <div class="achievement-name" id="achievement-name">Название</div>
+    </div>
+</div>
+
+<!-- ===== NOTIFICATION ===== -->
+<div id="notification" class="notification hidden"></div>
+
+<!-- ===== FX ===== -->
 <div id="glitch-overlay"></div>
 <div id="vignette"></div>
 <div id="flash"></div>
+<div id="scanlines"></div>
+<div id="blood-overlay"></div>
 
 <!-- ===== JUMPSCARE ===== -->
 <div id="jumpscare" class="hidden">
-    <div class="scary-face">😱</div>
+    <svg viewBox="0 0 400 400" class="scary-svg">
+        <defs>
+            <radialGradient id="eyeGlow">
+                <stop offset="0%" stop-color="#ff0000"/>
+                <stop offset="60%" stop-color="#880000"/>
+                <stop offset="100%" stop-color="#000000"/>
+            </radialGradient>
+            <filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        </defs>
+        <ellipse cx="200" cy="200" rx="180" ry="190" fill="#0a0000" stroke="#660000" stroke-width="3"/>
+        <ellipse cx="130" cy="160" rx="38" ry="46" fill="url(#eyeGlow)" filter="url(#glow)"/>
+        <ellipse cx="270" cy="160" rx="38" ry="46" fill="url(#eyeGlow)" filter="url(#glow)"/>
+        <circle cx="130" cy="160" r="10" fill="#000"/>
+        <circle cx="270" cy="160" r="10" fill="#000"/>
+        <ellipse cx="200" cy="300" rx="90" ry="60" fill="#1a0000" stroke="#880000" stroke-width="3"/>
+        <path d="M 130 280 L 150 340 L 170 280 L 190 340 L 210 280 L 230 340 L 250 280 L 270 340 L 285 280"
+              stroke="#fff" stroke-width="3" fill="none" filter="url(#glow)"/>
+        <path d="M 60 100 Q 30 40 90 30" stroke="#440000" stroke-width="6" fill="none"/>
+        <path d="M 340 100 Q 370 40 310 30" stroke="#440000" stroke-width="6" fill="none"/>
+    </svg>
 </div>
 
 <!-- ===== FADE ===== -->
@@ -128,31 +242,19 @@
 <!-- ===== ENDING SCREEN ===== -->
 <div id="ending" class="ending hidden">
     <div class="ending-content">
-        <h1 id="ending-title">ТЫ НЕ ДОЛЖЕН БЫЛ ЗАХОДИТЬ</h1>
-        <p id="ending-text">QIP 2012 больше не работает.</p>
-        <button id="restart-btn" type="button">ПОПРОБОВАТЬ СНОВА</button>
+        <h1 id="ending-title">КОНЕЦ</h1>
+        <p id="ending-text"></p>
+        <p id="ending-stats"></p>
+        <button id="restart-btn" type="button">НАЧАТЬ ЗАНОВО</button>
     </div>
 </div>
 
-<!-- ===== GOOD ENDING ===== -->
-<div id="good-ending" class="ending hidden">
-    <div class="ending-content good">
-        <h1 id="good-title">ТЫ ВЫЖИЛ</h1>
-        <p id="good-text">Ты закрыл QIP вовремя...</p>
-        <p id="good-text2">Но он всё ещё где-то там.</p>
-        <button id="restart-btn-2" type="button">ВЕРНУТЬСЯ</button>
-    </div>
-</div>
-
-<!-- ===== CHOICE DIALOG ===== -->
+<!-- ===== CHOICE MODAL ===== -->
 <div id="choice" class="choice hidden">
     <div class="choice-box">
-        <div class="choice-title">⚠️ ВНИМАНИЕ</div>
-        <div class="choice-text">Открыть чат с контактом <b>???</b>?</div>
-        <div class="choice-buttons">
-            <button id="choice-yes" type="button">ДА</button>
-            <button id="choice-no" type="button">НЕТ</button>
-        </div>
+        <div class="choice-title" id="choice-title">⚠️ ВНИМАНИЕ</div>
+        <div class="choice-text" id="choice-text"></div>
+        <div class="choice-buttons" id="choice-buttons"></div>
     </div>
 </div>
 
