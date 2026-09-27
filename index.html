@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Не нажимай</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Экран 1: Приветствие -->
+    <div id="screen-intro" class="screen active">
+        <h1 class="glitch" data-text="Ты уверен?">Ты уверен?</h1>
+        <p class="subtitle">Некоторые вещи лучше не открывать.</p>
+        <button id="btn-start" class="creepy-btn">Я готов</button>
+    </div>
+
+    <!-- Экран 2: Разрешение камеры -->
+    <div id="screen-permission" class="screen">
+        <h2>Разреши доступ к камере</h2>
+        <p>Мы просто хотим <span class="red">посмотреть на тебя</span>.</p>
+        <div class="video-wrapper">
+            <video id="webcam" autoplay playsinline muted></video>
+            <div class="scanline"></div>
+        </div>
+        <div class="btn-row">
+            <button id="btn-allow" class="creepy-btn">Разрешить</button>
+            <button id="btn-deny" class="creepy-btn ghost">Отказать</button>
+        </div>
+    </div>
+
+    <!-- Экран 3: Основной хоррор -->
+    <div id="screen-game" class="screen">
+        <div class="video-wrapper fullscreen-video">
+            <video id="webcam-bg" autoplay playsinline muted></video>
+            <div class="overlay-dark"></div>
+            <div class="scanline"></div>
+            <div class="noise"></div>
+        </div>
+
+        <div id="message-container">
+            <p id="message" class="message-text"></p>
+        </div>
+
+        <canvas id="eye-canvas"></canvas>
+
+        <audio id="whisper" loop>
+            <!-- можешь добавить свой звук шепота: <source src="whisper.mp3" type="audio/mpeg"> -->
+        </audio>
+    </div>
+
+    <!-- Экран 4: Финал -->
+    <div id="screen-end" class="screen">
+        <h1 class="glitch" data-text="Я тебя запомнил">Я тебя запомнил</h1>
+        <p class="subtitle">До следующего раза...</p>
+        <button id="btn-restart" class="creepy-btn">Начать заново</button>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
