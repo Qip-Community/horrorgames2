@@ -1,59 +1,46 @@
 'use strict';
-
 /* ============================================================
-   QIP 2012 — FINAL HORROR EDITION
-   ~2 часа геймплея, 5 актов, запись голоса, сохранения
+   QIP 2012 — LEGENDARY EDITION
+   Видео-вставки, карта локаций, кооп, leaderboard
    ============================================================ */
-
 (function() {
-    'use strict';
-
-    // ==================== HELPERS ====================
     const $ = id => document.getElementById(id);
     const $$ = sel => document.querySelectorAll(sel);
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const rand = (a, b) => a + Math.random() * (b - a);
     const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
-    // ==================== SAVE SYSTEM ====================
-    const SAVE_KEY = 'qip2012_save_v3';
+    // ==================== SAVE ====================
+    const SAVE_KEY = 'qip2012_save_v4';
     const DEFAULT_SAVE = {
-        act: 1,
-        scene: 0,
-        inventory: [],
-        achievements: [],
-        deaths: 0,
-        survived: 0,
-        best: 0,
-        correctAnswers: 0,
-        totalQuestions: 0,
-        knownContacts: ['admin'],
-        unlockedEntries: ['qip', 'admin'],
-        gameTime: 0,
-        sanity: 100,
-        lastSave: 0,
-        endings: [],
-        secretsFound: []
+        act: 1, scene: 0, inventory: [], achievements: [],
+        deaths: 0, survived: 0, best: 0,
+        correctAnswers: 0, totalQuestions: 0,
+        knownContacts: ['admin'], unlockedEntries: ['qip', 'admin'],
+        gameTime: 0, sanity: 100, endings: [], secretsFound: [],
+        room: 'desk', unlockedRooms: ['desk'],
+        playerName: '', lastSave: 0
     };
 
     function loadSave() {
         try {
             const raw = localStorage.getItem(SAVE_KEY);
             if (!raw) return { ...DEFAULT_SAVE };
-            const data = JSON.parse(raw);
-            return { ...DEFAULT_SAVE, ...data };
+            return { ...DEFAULT_SAVE, ...JSON.parse(raw) };
         } catch (e) { return { ...DEFAULT_SAVE }; }
     }
 
     function saveGame() {
+        if (!state.gameStarted) return;
         try {
             state.save.lastSave = Date.now();
             state.save.gameTime = state.gameTime;
             state.save.sanity = state.sanity;
             state.save.act = state.act;
             state.save.scene = state.sceneIndex;
+            state.save.room = state.currentRoom;
             localStorage.setItem(SAVE_KEY, JSON.stringify(state.save));
-        } catch (e) { /* ignore */ }
+        } catch (e) {}
     }
 
     function clearSave() {
@@ -62,34 +49,22 @@
 
     const state = {
         save: loadSave(),
-        gameStarted: false,
-        currentUser: null,
-        haunted: false,
-        act: 1,
-        sceneIndex: 0,
-        correctAnswers: 0,
-        totalQuestions: 0,
-        gameTime: 0,        // в секундах
-        sanity: 100,
-        dialogues: {},      // история диалогов по контакту
-        openedApps: new Set(),
+        gameStarted: false, paused: false,
+        currentUser: null, haunted: false,
+        act: 1, sceneIndex: 0,
+        correctAnswers: 0, totalQuestions: 0,
+        gameTime: 0, sanity: 100,
+        dialogues: {}, openedApps: new Set(),
         unknownUnlocked: false,
-        jumpscareTimer: null,
-        activeQuiz: null,
-        inventory: new Set(),
-        micStream: null,
-        recorder: null,
-        recordedChunks: [],
-        recordedAudio: null,
-        recordedAudioURL: null,
+        inventory: new Set(), micStream: null,
+        recordedAudioURL: null, recorder: null,
         clockH: 22, clockM: 13, clockS: 0,
-        timers: [],
-        paused: false,
-        eyesTimer: null,
-        ambientTimer: null
+        currentRoom: 'desk',
+        coopMode: false, coopCode: null, coopChannel: null,
+        ambientTimer: null, eyesTimer: null
     };
 
-    // Восстановить из сохранения
+    // Восстановить
     state.act = state.save.act || 1;
     state.sceneIndex = state.save.scene || 0;
     state.correctAnswers = state.save.correctAnswers || 0;
@@ -97,113 +72,100 @@
     state.gameTime = state.save.gameTime || 0;
     state.sanity = state.save.sanity ?? 100;
     state.inventory = new Set(state.save.inventory || []);
+    state.currentRoom = state.save.room || 'desk';
 
-    // ==================== DOM CACHE ====================
+    // ==================== DOM ====================
     const D = {
-        bootScreen: $('boot-screen'),
-        intro: $('intro'),
-        startBtn: $('start-btn'),
-        continueBtn: $('continue-btn'),
-        micBtn: $('mic-btn'),
-        micStatus: $('mic-status'),
+        bootScreen: $('boot-screen'), intro: $('intro'),
+        startBtn: $('start-btn'), continueBtn: $('continue-btn'),
+        coopBtn: $('coop-btn'), leaderboardBtn: $('leaderboard-btn'),
+        micBtn: $('mic-btn'), micStatus: $('mic-status'),
         introStats: $('intro-stats'),
-        hud: $('hud'),
-        hudAct: $('hud-act'),
-        hudObjective: $('hud-objective'),
-        hudTimer: $('hud-timer'),
-        sanityFill: $('sanity-fill'),
-        hudEye: $('hud-eye'),
-        hudInventory: $('hud-inventory'),
-        desktop: $('desktop'),
-        wallpaper: $('wallpaper'),
-        qipWindow: $('qip-window'),
-        contacts: $('contacts'),
-        chatHeader: $('chat-header'),
-        messages: $('messages'),
-        messageInput: $('message-input'),
-        sendBtn: $('send-btn'),
-        taskbarItems: $('taskbar-items'),
-        clock: $('clock'),
-        glitchOverlay: $('glitch-overlay'),
-        vignette: $('vignette'),
-        flash: $('flash'),
-        scanlines: $('scanlines'),
-        bloodOverlay: $('blood-overlay'),
-        jumpscare: $('jumpscare'),
-        fadeOverlay: $('fade-overlay'),
-        ending: $('ending'),
-        endingTitle: $('ending-title'),
-        endingText: $('ending-text'),
-        endingStats: $('ending-stats'),
-        restartBtn: $('restart-btn'),
-        choice: $('choice'),
-        choiceTitle: $('choice-title'),
-        choiceText: $('choice-text'),
-        choiceButtons: $('choice-buttons'),
-        achievement: $('achievement'),
-        achievementName: $('achievement-name'),
+        cutscene: $('cutscene'), cutsceneScene: $('cutscene-scene'),
+        cutsceneText: $('cutscene-text'), cutsceneSkip: $('cutscene-skip'),
+        cutsceneProgress: $('cutscene-progress-fill'),
+        hud: $('hud'), hudAct: $('hud-act'), hudObjective: $('hud-objective'),
+        hudTimer: $('hud-timer'), hudLocation: $('hud-location'),
+        sanityFill: $('sanity-fill'), hudEye: $('hud-eye'),
+        hudInventory: $('hud-inventory'), hudCoop: $('hud-coop'),
+        coopList: $('coop-list'),
+        desktop: $('desktop'), wallpaper: $('wallpaper'),
+        qipWindow: $('qip-window'), contacts: $('contacts'),
+        chatHeader: $('chat-header'), messages: $('messages'),
+        messageInput: $('message-input'), sendBtn: $('send-btn'),
+        taskbarItems: $('taskbar-items'), clock: $('clock'),
+        glitchOverlay: $('glitch-overlay'), vignette: $('vignette'),
+        flash: $('flash'), scanlines: $('scanlines'),
+        bloodOverlay: $('blood-overlay'), jumpscare: $('jumpscare'),
+        fadeOverlay: $('fade-overlay'), ending: $('ending'),
+        endingTitle: $('ending-title'), endingText: $('ending-text'),
+        endingStats: $('ending-stats'), restartBtn: $('restart-btn'),
+        leaderboardAfterBtn: $('leaderboard-after-btn'),
+        endingNameInput: $('ending-name-input'),
+        playerName: $('player-name'), saveScoreBtn: $('save-score-btn'),
+        choice: $('choice'), choiceTitle: $('choice-title'),
+        choiceText: $('choice-text'), choiceButtons: $('choice-buttons'),
+        achievement: $('achievement'), achievementName: $('achievement-name'),
         notification: $('notification'),
-        galleryGrid: $('gallery-grid'),
-        notesText: $('notes-text'),
+        galleryGrid: $('gallery-grid'), notesText: $('notes-text'),
         browserContent: $('browser-content'),
         encyclopediaBody: $('encyclopedia-body'),
-        imageTitle: $('image-title'),
-        imageBody: $('image-body')
+        imageTitle: $('image-title'), imageBody: $('image-body'),
+        leaderboardBody: $('leaderboard-body'),
+        coopModal: $('coop-modal'), coopCode: $('coop-code'),
+        coopCopy: $('coop-copy'), coopInput: $('coop-input'),
+        coopJoin: $('coop-join'), coopClose: $('coop-close'),
+        leaderboardModal: $('leaderboard-modal'),
+        leaderboardModalText: $('leaderboard-modal-text'),
+        leaderboardClose: $('leaderboard-close'),
+        roomView: $('room-view'), roomContent: $('room-content'),
+        roomExit: $('room-exit'),
+        mapView: $('map-view')
     };
 
-    // ==================== AUDIO ENGINE ====================
-    let audioCtx = null;
-    let drone = null;
-    let currentMusic = null;
+    // ==================== AUDIO ====================
+    let audioCtx = null, drone = null, musicInterval = null;
 
     function initAudio() {
         if (audioCtx) return;
         try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
     }
-    function resumeAudio() {
-        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-    }
+    function resumeAudio() { if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); }
 
     function startDrone() {
         if (!audioCtx || drone) return;
         try {
-            const osc1 = audioCtx.createOscillator();
-            const osc2 = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            const filter = audioCtx.createBiquadFilter();
-            osc1.type = 'sine'; osc1.frequency.value = 55;
-            osc2.type = 'sine'; osc2.frequency.value = 58;
-            filter.type = 'lowpass'; filter.frequency.value = 200;
-            gain.gain.value = 0.0001;
-            osc1.connect(filter); osc2.connect(filter);
-            filter.connect(gain); gain.connect(audioCtx.destination);
-            osc1.start(); osc2.start();
-            gain.gain.linearRampToValueAtTime(0.04, audioCtx.currentTime + 3);
-            drone = { osc1, osc2, gain, filter };
+            const o1 = audioCtx.createOscillator(), o2 = audioCtx.createOscillator();
+            const g = audioCtx.createGain(), f = audioCtx.createBiquadFilter();
+            o1.type = 'sine'; o1.frequency.value = 55;
+            o2.type = 'sine'; o2.frequency.value = 58;
+            f.type = 'lowpass'; f.frequency.value = 200;
+            g.gain.value = 0.0001;
+            o1.connect(f); o2.connect(f); f.connect(g); g.connect(audioCtx.destination);
+            o1.start(); o2.start();
+            g.gain.linearRampToValueAtTime(0.04, audioCtx.currentTime + 3);
+            drone = { o1, o2, g, f };
         } catch (e) {}
     }
 
     function setDroneIntensity(v) {
         if (!drone || !audioCtx) return;
-        const target = clamp(v, 0.0001, 0.25);
+        const t = clamp(v, 0.0001, 0.25);
         try {
-            drone.gain.gain.linearRampToValueAtTime(target, audioCtx.currentTime + 1);
-            drone.osc1.frequency.linearRampToValueAtTime(55 + target * 800, audioCtx.currentTime + 2);
-            drone.osc2.frequency.linearRampToValueAtTime(58 + target * 800, audioCtx.currentTime + 2);
+            drone.g.gain.linearRampToValueAtTime(t, audioCtx.currentTime + 1);
+            drone.o1.frequency.linearRampToValueAtTime(55 + t * 800, audioCtx.currentTime + 2);
+            drone.o2.frequency.linearRampToValueAtTime(58 + t * 800, audioCtx.currentTime + 2);
         } catch (e) {}
     }
 
-    function beep(freq, duration = 0.08, type = 'sine', volume = 0.05) {
+    function beep(f, d = 0.08, t = 'sine', v = 0.05) {
         if (!audioCtx) return;
         try {
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.type = type;
-            osc.frequency.value = freq;
-            gain.gain.value = volume;
-            gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
-            osc.connect(gain); gain.connect(audioCtx.destination);
-            osc.start(); osc.stop(audioCtx.currentTime + duration);
+            const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+            o.type = t; o.frequency.value = f; g.gain.value = v;
+            g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + d);
+            o.connect(g); g.connect(audioCtx.destination);
+            o.start(); o.stop(audioCtx.currentTime + d);
         } catch (e) {}
     }
 
@@ -214,23 +176,20 @@
             const data = buf.getChannelData(0);
             for (let i = 0; i < data.length; i++)
                 data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 0.5);
-            const noise = audioCtx.createBufferSource(); noise.buffer = buf;
+            const n = audioCtx.createBufferSource(); n.buffer = buf;
             const ng = audioCtx.createGain(); ng.gain.value = 0.35;
             const f = audioCtx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 400;
-            noise.connect(f); f.connect(ng); ng.connect(audioCtx.destination);
-
-            const osc = audioCtx.createOscillator();
-            const og = audioCtx.createGain();
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(1200, audioCtx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 1);
+            n.connect(f); f.connect(ng); ng.connect(audioCtx.destination);
+            const o = audioCtx.createOscillator(), og = audioCtx.createGain();
+            o.type = 'sawtooth';
+            o.frequency.setValueAtTime(1200, audioCtx.currentTime);
+            o.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 1);
             og.gain.value = 0.3;
             og.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 1);
-            osc.connect(og); og.connect(audioCtx.destination);
-
-            noise.start(); osc.start();
-            noise.stop(audioCtx.currentTime + 1.2);
-            osc.stop(audioCtx.currentTime + 1.2);
+            o.connect(og); og.connect(audioCtx.destination);
+            n.start(); o.start();
+            n.stop(audioCtx.currentTime + 1.2);
+            o.stop(audioCtx.currentTime + 1.2);
         } catch (e) {}
     }
 
@@ -241,68 +200,47 @@
             const data = buf.getChannelData(0);
             for (let i = 0; i < data.length; i++)
                 data[i] = (Math.random() * 2 - 1) * 0.3 * Math.sin(i * 0.0005);
-            const src = audioCtx.createBufferSource(); src.buffer = buf;
+            const s = audioCtx.createBufferSource(); s.buffer = buf;
             const f = audioCtx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 800; f.Q.value = 5;
             const g = audioCtx.createGain(); g.gain.value = 0.08;
-            src.connect(f); f.connect(g); g.connect(audioCtx.destination);
-            src.start(); src.stop(audioCtx.currentTime + 0.8);
+            s.connect(f); f.connect(g); g.connect(audioCtx.destination);
+            s.start(); s.stop(audioCtx.currentTime + 0.8);
         } catch (e) {}
     }
 
-    function messageSound() {
-        beep(880, 0.06, 'sine', 0.04);
-        setTimeout(() => beep(1200, 0.06, 'sine', 0.03), 40);
-    }
-    function successSound() {
-        beep(660, 0.1, 'sine', 0.06);
-        setTimeout(() => beep(880, 0.1, 'sine', 0.06), 90);
-        setTimeout(() => beep(1320, 0.15, 'sine', 0.06), 180);
-    }
-    function errorSound() {
-        beep(180, 0.15, 'sawtooth', 0.08);
-        setTimeout(() => beep(120, 0.2, 'sawtooth', 0.08), 120);
-    }
-    function heartbeat() {
-        beep(60, 0.1, 'sine', 0.15);
-        setTimeout(() => beep(50, 0.12, 'sine', 0.12), 180);
-    }
+    function messageSound() { beep(880, 0.06, 'sine', 0.04); setTimeout(() => beep(1200, 0.06, 'sine', 0.03), 40); }
+    function successSound() { beep(660, 0.1, 'sine', 0.06); setTimeout(() => beep(880, 0.1, 'sine', 0.06), 90); setTimeout(() => beep(1320, 0.15, 'sine', 0.06), 180); }
+    function errorSound() { beep(180, 0.15, 'sawtooth', 0.08); setTimeout(() => beep(120, 0.2, 'sawtooth', 0.08), 120); }
+    function heartbeat() { beep(60, 0.1, 'sine', 0.15); setTimeout(() => beep(50, 0.12, 'sine', 0.12), 180); }
 
-    // Музыка по актам (процедурная)
     function playMusicForAct(act) {
-        if (!audioCtx) return;
         stopMusic();
-        try {
-            const notes = {
-                1: [220, 233, 246, 220],
-                2: [196, 208, 220, 196],
-                3: [174, 185, 196, 174],
-                4: [146, 155, 164, 146],
-                5: [110, 116, 123, 110]
-            }[act] || [220];
-            let idx = 0;
-            const playNote = () => {
-                if (!audioCtx || currentMusic === null) return;
-                try {
-                    const osc = audioCtx.createOscillator();
-                    const g = audioCtx.createGain();
-                    osc.type = 'triangle';
-                    osc.frequency.value = notes[idx % notes.length];
-                    g.gain.value = 0.02;
-                    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 3.5);
-                    osc.connect(g); g.connect(audioCtx.destination);
-                    osc.start(); osc.stop(audioCtx.currentTime + 4);
-                    idx++;
-                } catch (e) {}
-            };
-            playNote();
-            currentMusic = setInterval(playNote, 4000);
-        } catch (e) {}
+        if (!audioCtx) return;
+        const notes = {
+            1: [220, 233, 246, 220], 2: [196, 208, 220, 196],
+            3: [174, 185, 196, 174], 4: [146, 155, 164, 146],
+            5: [110, 116, 123, 110]
+        }[act] || [220];
+        let idx = 0;
+        const playNote = () => {
+            if (!audioCtx || !musicInterval) return;
+            try {
+                const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                o.type = 'triangle';
+                o.frequency.value = notes[idx % notes.length];
+                g.gain.value = 0.02;
+                g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 3.5);
+                o.connect(g); g.connect(audioCtx.destination);
+                o.start(); o.stop(audioCtx.currentTime + 4);
+                idx++;
+            } catch (e) {}
+        };
+        playNote();
+        musicInterval = setInterval(playNote, 4000);
     }
-    function stopMusic() {
-        if (currentMusic) { clearInterval(currentMusic); currentMusic = null; }
-    }
+    function stopMusic() { if (musicInterval) { clearInterval(musicInterval); musicInterval = null; } }
 
-    // ==================== MICROPHONE ====================
+    // ==================== MIC ====================
     async function requestMic() {
         if (state.micStream) return true;
         try {
@@ -318,7 +256,7 @@
         }
     }
 
-    async function recordVoice(durationMs = 800) {
+    async function recordVoice(ms = 800) {
         if (!state.micStream) return;
         try {
             const rec = new MediaRecorder(state.micStream);
@@ -327,23 +265,21 @@
             rec.onstop = () => {
                 try {
                     const blob = new Blob(chunks, { type: 'audio/webm' });
-                    state.recordedAudio = blob;
                     if (state.recordedAudioURL) URL.revokeObjectURL(state.recordedAudioURL);
                     state.recordedAudioURL = URL.createObjectURL(blob);
                 } catch (e) {}
             };
             rec.start();
-            setTimeout(() => { try { rec.stop(); } catch (e) {} }, durationMs);
-            state.recorder = rec;
+            setTimeout(() => { try { rec.stop(); } catch (e) {} }, ms);
         } catch (e) {}
     }
 
     function playRecordedVoice() {
         if (!state.recordedAudioURL) return false;
         try {
-            const audio = new Audio(state.recordedAudioURL);
-            audio.volume = 0.8;
-            audio.play().catch(() => {});
+            const a = new Audio(state.recordedAudioURL);
+            a.volume = 0.9;
+            a.play().catch(() => {});
             return true;
         } catch (e) { return false; }
     }
@@ -364,7 +300,8 @@
     function showNotification(text, duration = 2500) {
         D.notification.textContent = text;
         D.notification.classList.remove('hidden');
-        setTimeout(() => D.notification.classList.add('hidden'), duration);
+        clearTimeout(state._notifTimer);
+        state._notifTimer = setTimeout(() => D.notification.classList.add('hidden'), duration);
     }
     function showAchievement(name) {
         if (state.save.achievements.includes(name)) return;
@@ -398,33 +335,33 @@
         state.act = act;
         state.save.act = act;
         saveGame();
-        const actNames = {
-            1: 'АКТ I — ПРОБУЖДЕНИЕ',
-            2: 'АКТ II — СВЯЗЬ',
-            3: 'АКТ III — ИСЧЕЗНОВЕНИЕ',
-            4: 'АКТ IV — ОХОТА',
+        const names = {
+            1: 'АКТ I — ПРОБУЖДЕНИЕ', 2: 'АКТ II — СВЯЗЬ',
+            3: 'АКТ III — ИСЧЕЗНОВЕНИЕ', 4: 'АКТ IV — ОХОТА',
             5: 'АКТ V — ФИНАЛ'
         };
-        D.hudAct.textContent = actNames[act] || '';
+        D.hudAct.textContent = names[act] || '';
         playMusicForAct(act);
     }
-    function setObjective(text) {
-        D.hudObjective.textContent = 'Цель: ' + text;
+    function setObjective(text) { D.hudObjective.textContent = 'Цель: ' + text; }
+    function updateLocation(loc) {
+        state.currentRoom = loc;
+        const names = { desk: '🖥️ Комната', kitchen: '🍳 Кухня', hallway: '🚪 Коридор', bathroom: '🚿 Ванная', basement: '🔒 Подвал' };
+        D.hudLocation.textContent = '📍 ' + (names[loc] || loc);
+        $$('.map-room').forEach(el => {
+            el.classList.toggle('active', el.dataset.room === loc);
+        });
+        D.wallpaper.className = '';
+        if (loc !== 'desk') D.wallpaper.classList.add('room-' + loc);
     }
     function updateSanity(delta) {
         state.sanity = clamp(state.sanity + delta, 0, 100);
         D.sanityFill.style.width = state.sanity + '%';
         D.sanityFill.style.background = state.sanity > 60 ? '#0c4' :
             state.sanity > 30 ? 'linear-gradient(90deg,#fc0,#f80)' : '#c22';
-        if (state.sanity < 30) {
-            D.bloodOverlay.classList.add('active');
-        } else {
-            D.bloodOverlay.classList.remove('active');
-        }
-        if (state.sanity <= 0) {
-            // смерть от безумия
-            jumpscareEffect('sanity');
-        }
+        if (state.sanity < 30) D.bloodOverlay.classList.add('active');
+        else D.bloodOverlay.classList.remove('active');
+        if (state.sanity <= 0 && state.gameStarted && !state.paused) jumpscareEffect('sanity');
     }
     function startGameTimer() {
         setInterval(() => {
@@ -433,14 +370,10 @@
             const h = Math.floor(state.gameTime / 3600);
             const m = Math.floor((state.gameTime % 3600) / 60);
             const s = state.gameTime % 60;
-            D.hudTimer.textContent =
-                `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-            // Автосохранение каждые 30 сек
+            D.hudTimer.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
             if (state.gameTime % 30 === 0) saveGame();
         }, 1000);
     }
-
-    // ==================== CLOCK ====================
     function startClock() {
         updateClock();
         setInterval(() => {
@@ -453,19 +386,14 @@
     }
     function updateClock() {
         D.clock.textContent = `${String(state.clockH).padStart(2,'0')}:${String(state.clockM).padStart(2,'0')}`;
-        // Но в акте 3+ часы сходят с ума
         if (state.act >= 3 && Math.random() < 0.1) {
-            const rH = Math.floor(rand(0, 24));
-            const rM = Math.floor(rand(0, 60));
-            D.clock.textContent = `${String(rH).padStart(2,'0')}:${String(rM).padStart(2,'0')}`;
+            D.clock.textContent = `${String(Math.floor(rand(0,24))).padStart(2,'0')}:${String(Math.floor(rand(0,60))).padStart(2,'0')}`;
         }
     }
-
-    // ==================== EYE (следящий глаз) ====================
     function startEye() {
         if (state.eyesTimer) return;
         state.eyesTimer = setInterval(() => {
-            if (!state.gameStarted) return;
+            if (!state.gameStarted || state.paused) return;
             if (state.act >= 2 && Math.random() < 0.3) {
                 D.hudEye.classList.add('active');
                 whisperSound();
@@ -473,8 +401,6 @@
             }
         }, 15000);
     }
-
-    // ==================== AMBIENT ====================
     function startAmbient() {
         if (state.ambientTimer) return;
         state.ambientTimer = setInterval(() => {
@@ -483,20 +409,25 @@
             if (Math.random() < chance) {
                 triggerGlitch();
                 if (Math.random() < 0.5) whisperSound();
-                if (Math.random() < 0.3) {
-                    updateSanity(-1);
-                    heartbeat();
-                }
+                if (Math.random() < 0.3) { updateSanity(-1); heartbeat(); }
             }
         }, 5000);
     }
 
     // ==================== BOOT ====================
+    function updateIntroStats() {
+        const p = [];
+        if (state.save.deaths > 0) p.push(`💀 Смертей: ${state.save.deaths}`);
+        if (state.save.survived > 0) p.push(`🟢 Спасений: ${state.save.survived}`);
+        if (state.save.best > 0) p.push(`🏆 Побед: ${state.save.best}`);
+        if (state.save.act > 1) p.push(`📖 Акт: ${state.save.act}`);
+        D.introStats.textContent = p.length ? p.join(' · ') : '';
+    }
+
     function runBoot() {
         updateIntroStats();
         const hasSave = state.save.act > 1 || state.gameTime > 60;
         if (hasSave) D.continueBtn.classList.remove('hidden');
-
         setTimeout(() => {
             D.bootScreen.classList.add('fade-out');
             setTimeout(() => {
@@ -505,32 +436,203 @@
             }, 800);
         }, 3400);
     }
-    function updateIntroStats() {
-        const parts = [];
-        if (state.save.deaths > 0) parts.push(`💀 Смертей: ${state.save.deaths}`);
-        if (state.save.survived > 0) parts.push(`🟢 Спасений: ${state.save.survived}`);
-        if (state.save.best > 0) parts.push(`🏆 Побед: ${state.save.best}`);
-        if (state.save.act > 1) parts.push(`📖 Акт: ${state.save.act}`);
-        D.introStats.textContent = parts.length ? parts.join(' · ') : '';
+
+    // ==================== CUTSCENE ====================
+    const CUTSCENES = {
+        intro: {
+            duration: 8000,
+            scenes: [
+                { time: 0,    svg: cutSvgCRT(), text: 'Windows XP... 2012 год...' },
+                { time: 2500, svg: cutSvgQIP(), text: 'QIP 2012. Твой любимый мессенджер.' },
+                { time: 5500, svg: cutSvgEye(), text: 'Ты давно не заходил в него...' }
+            ]
+        },
+        act2: {
+            duration: 6000,
+            scenes: [
+                { time: 0,    svg: cutSvgContact(), text: 'Кто-то добавил тебя в контакты.' },
+                { time: 3000, svg: cutSvgEye(), text: 'Контакт без имени. Без фото. Без статуса.' }
+            ]
+        },
+        act3: {
+            duration: 7000,
+            scenes: [
+                { time: 0,    svg: cutSvgDisappear(), text: 'Маша отключилась...' },
+                { time: 3000, svg: cutSvgPhoto(), text: 'IMG_2013.jpg содержит то, что не должно существовать.' }
+            ]
+        },
+        act4: {
+            duration: 8000,
+            scenes: [
+                { time: 0,    svg: cutSvgHunter(), text: 'Он вышел из чата в реальный мир.' },
+                { time: 4000, svg: cutSvgEye(), text: 'Теперь он охотится за тобой.' }
+            ]
+        },
+        act5: {
+            duration: 7000,
+            scenes: [
+                { time: 0,    svg: cutSvgFinal(), text: 'Последний вопрос.' },
+                { time: 3500, svg: cutSvgEye(), text: 'Ответь правильно — и ты свободен.' }
+            ]
+        }
+    };
+
+    function cutSvgCRT() {
+        return `<svg viewBox="0 0 400 300" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+            <rect width="400" height="300" fill="#000"/>
+            <rect x="20" y="20" width="360" height="240" fill="#111" stroke="#333" stroke-width="2" rx="10"/>
+            <rect x="40" y="40" width="320" height="200" fill="#050" opacity="0.4"/>
+            <text x="200" y="150" fill="#0f0" font-family="monospace" font-size="20" text-anchor="middle">C:\\&gt;_</text>
+            <rect x="20" y="270" width="360" height="10" fill="#222" rx="3"/>
+            <text x="200" y="290" fill="#666" font-family="monospace" font-size="10" text-anchor="middle">Windows XP Professional</text>
+        </svg>`;
+    }
+    function cutSvgQIP() {
+        return `<svg viewBox="0 0 400 300" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+            <rect width="400" height="300" fill="#0a0a15"/>
+            <rect x="40" y="40" width="320" height="220" fill="#eef2f7" rx="6" stroke="#6a8ab0" stroke-width="2"/>
+            <rect x="40" y="40" width="320" height="24" fill="#3a6aa0" rx="6"/>
+            <text x="60" y="57" fill="#fff" font-family="sans-serif" font-size="12">💬 QIP 2012</text>
+            <rect x="50" y="70" width="80" height="180" fill="#dce6f0"/>
+            <rect x="140" y="70" width="210" height="180" fill="#f5f8fc"/>
+            <circle cx="90" cy="90" r="10" fill="#9ab"/>
+            <text x="90" y="120" fill="#234" font-family="sans-serif" font-size="10" text-anchor="middle">Admin</text>
+        </svg>`;
+    }
+    function cutSvgEye() {
+        return `<svg viewBox="0 0 400 300" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+            <rect width="400" height="300" fill="#000"/>
+            <ellipse cx="200" cy="150" rx="120" ry="70" fill="#1a0000" stroke="#440000" stroke-width="3"/>
+            <ellipse cx="200" cy="150" rx="110" ry="60" fill="#3a0000"/>
+            <circle cx="200" cy="150" r="45" fill="#0a0000"/>
+            <circle cx="200" cy="150" r="30" fill="#f00" opacity="0.7">
+                <animate attributeName="r" values="28;32;28" dur="2s" repeatCount="indefinite"/>
+            </circle>
+            <circle cx="200" cy="150" r="12" fill="#000"/>
+            <circle cx="185" cy="135" r="4" fill="#fff" opacity="0.8"/>
+            <ellipse cx="100" cy="150" rx="20" ry="40" fill="#000" opacity="0.5"/>
+            <ellipse cx="300" cy="150" rx="20" ry="40" fill="#000" opacity="0.5"/>
+        </svg>`;
+    }
+    function cutSvgContact() {
+        return `<svg viewBox="0 0 400 300" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+            <rect width="400" height="300" fill="#0a0a15"/>
+            <rect x="100" y="100" width="200" height="100" fill="#1a0000" rx="6" stroke="#600" stroke-width="2"/>
+            <text x="200" y="140" fill="#f22" font-family="monospace" font-size="18" text-anchor="middle" font-weight="bold">???</text>
+            <text x="200" y="170" fill="#600" font-family="monospace" font-size="12" text-anchor="middle">добавил вас в контакты</text>
+        </svg>`;
+    }
+    function cutSvgDisappear() {
+        return `<svg viewBox="0 0 400 300" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+            <rect width="400" height="300" fill="#000"/>
+            <text x="200" y="120" fill="#666" font-family="sans-serif" font-size="14" text-anchor="middle">Маша</text>
+            <text x="200" y="160" fill="#888" font-family="sans-serif" font-size="14" text-anchor="middle">в сети</text>
+            <line x1="100" y1="145" x2="300" y2="145" stroke="#c22" stroke-width="3" stroke-dasharray="8 4">
+                <animate attributeName="stroke-dashoffset" from="0" to="24" dur="1s" repeatCount="indefinite"/>
+            </line>
+            <text x="200" y="200" fill="#c22" font-family="monospace" font-size="14" text-anchor="middle" font-weight="bold">УДАЛЕНО</text>
+        </svg>`;
+    }
+    function cutSvgPhoto() {
+        return `<svg viewBox="0 0 400 300" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+            <rect width="400" height="300" fill="#000"/>
+            <rect x="120" y="80" width="160" height="140" fill="#1a0000" stroke="#600" stroke-width="3"/>
+            <text x="200" y="155" fill="#f22" font-family="monospace" font-size="60" text-anchor="middle">👁️</text>
+            <text x="200" y="240" fill="#600" font-family="monospace" font-size="11" text-anchor="middle">IMG_2013.jpg</text>
+        </svg>`;
+    }
+    function cutSvgHunter() {
+        return `<svg viewBox="0 0 400 300" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+            <rect width="400" height="300" fill="#000"/>
+            <path d="M 150 200 Q 200 100 250 200 Q 200 260 150 200" fill="#1a0000" stroke="#600" stroke-width="2"/>
+            <circle cx="180" cy="180" r="8" fill="#f00">
+                <animate attributeName="r" values="7;10;7" dur="1s" repeatCount="indefinite"/>
+            </circle>
+            <circle cx="220" cy="180" r="8" fill="#f00">
+                <animate attributeName="r" values="7;10;7" dur="1s" repeatCount="indefinite"/>
+            </circle>
+            <text x="200" y="280" fill="#600" font-family="monospace" font-size="12" text-anchor="middle">он вышел в сеть</text>
+        </svg>`;
+    }
+    function cutSvgFinal() {
+        return `<svg viewBox="0 0 400 300" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+            <rect width="400" height="300" fill="#000"/>
+            <text x="200" y="150" fill="#f22" font-family="monospace" font-size="48" text-anchor="middle" font-weight="bold">?</text>
+            <text x="200" y="220" fill="#600" font-family="monospace" font-size="14" text-anchor="middle">последний вопрос</text>
+        </svg>`;
     }
 
-    // ==================== START / CONTINUE ====================
-    async function startGame(continueMode = false) {
+    async function playCutscene(name) {
+        const cs = CUTSCENES[name];
+        if (!cs) return Promise.resolve();
+        return new Promise(resolve => {
+            D.cutscene.classList.remove('hidden');
+            D.cutsceneScene.innerHTML = '';
+            D.cutsceneText.textContent = '';
+            D.cutsceneProgress.style.width = '0%';
+
+            const startTime = Date.now();
+            let sceneIdx = 0;
+            let skipped = false;
+
+            const skip = () => {
+                skipped = true;
+                D.cutscene.classList.add('hidden');
+                resolve();
+            };
+            D.cutsceneSkip.onclick = skip;
+
+            const progressInterval = setInterval(() => {
+                if (skipped) return;
+                const elapsed = Date.now() - startTime;
+                D.cutsceneProgress.style.width = Math.min(100, (elapsed / cs.duration) * 100) + '%';
+            }, 100);
+
+            const checkScene = () => {
+                if (skipped) return;
+                const elapsed = Date.now() - startTime;
+                if (elapsed >= cs.duration) {
+                    clearInterval(progressInterval);
+                    clearTimeout(sceneTimer);
+                    skip();
+                    return;
+                }
+                // Определить текущую сцену
+                let newIdx = 0;
+                for (let i = 0; i < cs.scenes.length; i++) {
+                    if (elapsed >= cs.scenes[i].time) newIdx = i;
+                }
+                if (newIdx !== sceneIdx) {
+                    sceneIdx = newIdx;
+                    const s = cs.scenes[sceneIdx];
+                    D.cutsceneScene.innerHTML = s.svg;
+                    D.cutsceneText.textContent = s.text;
+                }
+                sceneTimer = setTimeout(checkScene, 100);
+            };
+            let sceneTimer = setTimeout(checkScene, 100);
+
+            // Первая сцена
+            D.cutsceneScene.innerHTML = cs.scenes[0].svg;
+            D.cutsceneText.textContent = cs.scenes[0].text;
+            sceneIdx = 0;
+            checkScene();
+        });
+    }
+
+    // ==================== START ====================
+    async function startGame(continueMode = false, coopJoin = null) {
         if (state.gameStarted) return;
         state.gameStarted = true;
 
         if (!continueMode) {
-            // Новая игра
-            state.save = { ...DEFAULT_SAVE, deaths: state.save.deaths, survived: state.save.survived, best: state.save.best };
-            state.act = 1;
-            state.sceneIndex = 0;
-            state.correctAnswers = 0;
-            state.totalQuestions = 0;
-            state.gameTime = 0;
-            state.sanity = 100;
+            state.save = { ...DEFAULT_SAVE,
+                deaths: state.save.deaths, survived: state.save.survived, best: state.save.best };
+            state.act = 1; state.sceneIndex = 0;
+            state.correctAnswers = 0; state.totalQuestions = 0;
+            state.gameTime = 0; state.sanity = 100;
             state.inventory = new Set();
         } else {
-            // Продолжаем
             state.act = state.save.act || 1;
             state.sceneIndex = state.save.scene || 0;
             state.correctAnswers = state.save.correctAnswers || 0;
@@ -538,6 +640,7 @@
             state.gameTime = state.save.gameTime || 0;
             state.sanity = state.save.sanity ?? 100;
             state.inventory = new Set(state.save.inventory || []);
+            state.currentRoom = state.save.room || 'desk';
         }
 
         initAudio();
@@ -545,15 +648,16 @@
         await requestMic();
 
         D.intro.classList.add('fade-out');
-        setTimeout(() => {
-            D.intro.classList.add('hidden');
-            D.desktop.classList.remove('hidden');
-            D.hud.classList.remove('hidden');
-            setTimeout(() => {
-                D.qipWindow.classList.add('visible');
-                openApp('qip-window');
-            }, 200);
-        }, 900);
+        await wait(900);
+        D.intro.classList.add('hidden');
+        D.desktop.classList.remove('hidden');
+        D.hud.classList.remove('hidden');
+
+        // Cutscene intro
+        if (!continueMode) await playCutscene('intro');
+
+        D.qipWindow.classList.add('visible');
+        openApp('qip-window');
 
         startDrone();
         startClock();
@@ -564,8 +668,8 @@
         updateSanity(0);
         renderInventory();
         renderContacts();
+        updateLocation(state.currentRoom);
 
-        // Стартовый сценарий
         if (continueMode) {
             setAct(state.act);
             setObjective('Продолжить расследование');
@@ -575,6 +679,8 @@
             setAct(1);
             setTimeout(() => runAct(1), 500);
         }
+
+        if (coopJoin) initCoop(coopJoin, false);
     }
 
     // ==================== CONTACTS ====================
@@ -585,8 +691,7 @@
         olga: { name: 'Ольга', avatar: '👩', status: 'не в сети', locked: true },
         unknown: { name: '???', avatar: '❓', status: 'не в сети', locked: true },
         kate: { name: 'Катя', avatar: '👧', status: 'в сети', locked: true },
-        max: { name: 'Максим', avatar: '🧔', status: 'в сети', locked: true },
-        dead: { name: 'УДАЛЁН', avatar: '💀', status: 'не существует', locked: true }
+        max: { name: 'Максим', avatar: '🧔', status: 'в сети', locked: true }
     };
 
     function renderContacts() {
@@ -597,7 +702,6 @@
             div.className = 'contact' + (c.locked ? ' locked' : '');
             div.dataset.user = id;
             const statusClass = c.status === 'не в сети' ? 'offline' :
-                c.status === 'не существует' ? 'online-red' :
                 c.status === 'он в сети' ? 'online-red' : '';
             div.innerHTML = `
                 <div class="avatar">${c.avatar}</div>
@@ -619,20 +723,15 @@
         showNotification(`👤 Новый контакт: ${CONTACTS[id].name}`);
     }
 
-    function openChat(user, contactEl) {
+    function openChat(user, el) {
         state.currentUser = user;
         $$('.contact').forEach(x => x.classList.remove('active'));
-        if (contactEl) contactEl.classList.add('active');
-
+        if (el) el.classList.add('active');
         D.chatHeader.textContent = `Чат с ${CONTACTS[user].name}`;
         D.messages.innerHTML = '';
         D.messageInput.disabled = false;
-        D.messageInput.placeholder = 'Введите сообщение...';
         D.sendBtn.disabled = false;
-
         setTimeout(() => { try { D.messageInput.focus(); } catch (e) {} }, 100);
-
-        // Восстановить историю
         if (state.dialogues[user]) {
             state.dialogues[user].forEach(m => addMessage(m.text, m.type, false, false));
         } else {
@@ -649,28 +748,19 @@
         D.messages.appendChild(div);
         D.messages.scrollTop = D.messages.scrollHeight;
         if (sound && type !== 'system') messageSound();
-
-        // Сохранить в историю
         if (state.currentUser) {
             if (!state.dialogues[state.currentUser]) state.dialogues[state.currentUser] = [];
             state.dialogues[state.currentUser].push({ text, type });
         }
+        if (state.coopMode && state.coopChannel) {
+            // Отправить через BroadcastChannel
+            try {
+                state.coopChannel.postMessage({ type: 'message', text, msgType: type, sender: 'other' });
+            } catch (e) {}
+        }
         return div;
     }
 
-    function addImageMessage(dataURL, type = 'them') {
-        const div = document.createElement('div');
-        div.className = `message ${type} image-msg`;
-        const img = document.createElement('img');
-        img.src = dataURL;
-        img.className = 'msg-img';
-        div.appendChild(img);
-        D.messages.appendChild(div);
-        D.messages.scrollTop = D.messages.scrollHeight;
-        messageSound();
-    }
-
-    // ==================== SEND MESSAGE ====================
     function sendMessage() {
         const text = D.messageInput.value.trim();
         if (!text || !state.currentUser) return;
@@ -688,8 +778,7 @@
 
             setTimeout(() => {
                 typing.remove();
-                // Реакция зависит от акта и контакта
-                const reply = getReply(user, text);
+                const reply = getReply(user);
                 if (reply) {
                     addMessage(reply.text, reply.type);
                     if (reply.type === 'creepy') {
@@ -702,9 +791,9 @@
         }, 400);
     }
 
-    function getReply(user, text) {
+    function getReply(user) {
         if (user === 'unknown') return { text: 'ты думаешь, что можешь со мной говорить?', type: 'creepy' };
-        if (user === 'masha') return { text: 'он ближе... не пиши ему', type: 'creepy' };
+        if (user === 'masha') return { text: 'он ближе...', type: 'creepy' };
         if (user === 'pavel') return { text: 'беги, пока можешь', type: 'creepy' };
         if (user === 'admin') return { text: 'Не пиши ему. ПРОШУ.', type: 'creepy' };
         if (state.act >= 3) return { text: 'я тебя вижу', type: 'creepy' };
@@ -716,18 +805,13 @@
         if (e.key === 'Enter') { e.preventDefault(); sendMessage(); }
     });
 
-    // ==================== ACT SCRIPTS ====================
-
-    // Универсальная функция: проигрывает диалог из массива
-    // {user, delay, text, type} — с задержкой от начала акта
+    // ==================== SCRIPTS ====================
     async function playScript(script) {
-        const startTime = Date.now();
+        const t0 = Date.now();
         const promises = script.map(async line => {
-            const waitTime = line.delay - (Date.now() - startTime);
+            const waitTime = line.delay - (Date.now() - t0);
             if (waitTime > 0) await wait(waitTime);
             if (!state.gameStarted || state.paused) return;
-            // Открыть чат с нужным контактом? Нет — просто добавить сообщение
-            // (игрок сам может быть в другом чате; но логично переключить)
             if (line.switchTo && state.currentUser !== line.switchTo) {
                 const c = document.querySelector(`[data-user="${line.switchTo}"]`);
                 if (c) c.click();
@@ -747,7 +831,7 @@
         await Promise.all(promises);
     }
 
-    // ==================== АКТ I ====================
+    // ==================== ACTS ====================
     async function runAct(act) {
         switch (act) {
             case 1: return runAct1();
@@ -765,246 +849,196 @@
         renderContacts();
 
         const script = [
-            // Приветствие
-            { user: 'admin', delay: 1000, switchTo: 'admin', text: 'Привет. Ты новый тут? Не заходи в чат с ником "???".', type: 'them' },
-            { user: 'admin', delay: 4000, text: 'Серьёзно. Если увидишь его в сети — сразу закрывай QIP.', type: 'them' },
-            { user: 'admin', delay: 7000, text: 'Он уже забрал 3 контакта. Маша следующая.', type: 'them' },
-            { user: 'admin', delay: 11000, text: 'Посмотри в "Мои фото". Там есть IMG_2013.jpg. Не открывай, просто посмотри имя.', type: 'them' },
-            { user: 'admin', delay: 15000, text: 'И прочитай notes.txt. Это важно.', type: 'them', setObjective: 'прочитать notes.txt' },
-
-            // Маша пишет
-            { user: 'masha', delay: 20000, switchTo: 'masha', text: 'приветик :) ты видел странные сообщения от ???', type: 'them' },
-            { user: 'masha', delay: 24000, text: 'я зашла в его чат... и теперь у меня в комнате кто-то ходит', type: 'them' },
-            { user: 'masha', delay: 28000, text: 'пожалуйста помоги мне', type: 'them' },
-
-            // Павел пишет
-            { user: 'pavel', delay: 33000, switchTo: 'pavel', text: 'Слушай, админ пропал.', type: 'them' },
-            { user: 'pavel', delay: 37000, text: 'Вчера писал мне ночью. Говорил "он среди нас".', type: 'them' },
-            { user: 'pavel', delay: 41000, text: 'Потом QIP сам закрылся. И статус админа стал "не в сети" навсегда.', type: 'them', unlockContact: 'olga' },
-
-            // Возврат к админу
-            { user: 'admin', delay: 46000, switchTo: 'admin', text: 'Ты читал notes.txt? Там про контакт "???".', type: 'them', setObjective: 'прочитать notes.txt и найти IMG_2013.jpg' },
-            { user: 'admin', delay: 52000, text: 'И ещё: не вводи ничего в чат с ??? раньше времени.', type: 'them' },
-            { user: 'admin', delay: 58000, text: 'Тестирование начнётся само. Вопросов будет много.', type: 'them' },
-
-            // Небольшое ожидание и переход к акту 2
-            { user: 'admin', delay: 65000, text: 'Ну что, готов? Начинаем.', type: 'them', action: () => {
-                showNotification('⏭ АКТ I завершён. Готовься...');
-                setTimeout(() => runAct2(), 4000);
+            { delay: 1000, switchTo: 'admin', text: 'Привет. Ты новый тут? Не заходи в чат с ником "???".', type: 'them' },
+            { delay: 4000, text: 'Серьёзно. Если увидишь его в сети — сразу закрывай QIP.', type: 'them' },
+            { delay: 7000, text: 'Он уже забрал 3 контакта. Маша следующая.', type: 'them' },
+            { delay: 11000, text: 'Посмотри в "Мои фото". Там есть IMG_2013.jpg.', type: 'them' },
+            { delay: 15000, text: 'И прочитай notes.txt. Это важно.', type: 'them', setObjective: 'прочитать notes.txt' },
+            { delay: 20000, switchTo: 'masha', text: 'приветик :) ты видел странные сообщения от ???', type: 'them' },
+            { delay: 24000, text: 'я зашла в его чат... и теперь у меня в комнате кто-то ходит', type: 'them' },
+            { delay: 28000, text: 'пожалуйста помоги мне', type: 'them' },
+            { delay: 33000, switchTo: 'pavel', text: 'Слушай, админ пропал.', type: 'them' },
+            { delay: 37000, text: 'Вчера писал мне ночью. Говорил "он среди нас".', type: 'them' },
+            { delay: 41000, text: 'Потом QIP сам закрылся. И статус админа стал "не в сети" навсегда.', type: 'them', unlockContact: 'olga' },
+            { delay: 46000, switchTo: 'admin', text: 'Ты читал notes.txt? Там про контакт "???".', type: 'them', setObjective: 'прочитать notes.txt и найти IMG_2013.jpg' },
+            { delay: 52000, text: 'Тестирование начнётся само. Вопросов будет много.', type: 'them' },
+            { delay: 58000, text: 'Ну что, готов? Начинаем.', type: 'them', action: async () => {
+                showNotification('⏭ АКТ I завершён');
+                await wait(2000);
+                await playCutscene('act2');
+                runAct2();
             }}
         ];
         await playScript(script);
     }
 
-    // ==================== АКТ II — ВОПРОСЫ ====================
+    // ==================== QUIZZES ====================
     const QUIZ_ACTS = {
         2: [
-            {
-                question: 'Администратор: «Первое правило QIP: если незнакомец предлагает открыть файл — что делаешь?»',
-                options: [
-                    { key: '1', text: 'Открою, интересно же', correct: false },
-                    { key: '2', text: 'Откажусь и заблокирую', correct: true }
-                ],
-                wrongReply: 'Ты уже открыл его... он внутри тебя.',
-                correctReply: 'Умно. Ты можешь выжить.',
-                wrongSanity: -15, correctSanity: 0
-            },
-            {
-                question: 'Маша: «Он стучит в мою дверь. Что мне делать?»',
-                options: [
-                    { key: '1', text: 'Открой — может, это помощь', correct: false },
-                    { key: '2', text: 'Не открывай и вызови помощь', correct: true }
-                ],
-                wrongReply: 'Она открыла. Я слышу её крик.',
-                correctReply: 'Она закрылась. Но он уже внутри.',
-                wrongSanity: -20, correctSanity: -5
-            },
-            {
-                question: 'Голос: «Ты хочешь увидеть его лицо?»',
-                options: [
-                    { key: '1', text: 'Да, покажи себя', correct: false },
-                    { key: '2', text: 'Нет, уйди', correct: true }
-                ],
-                wrongReply: 'Поздно. Он в твоём экране.',
-                correctReply: 'Ты отверг его. Но он вернётся.',
-                wrongSanity: -25, correctSanity: 0,
-                onWrong: () => { triggerGlitch(2); flashScreen('red'); scareSound(); },
-                onCorrect: () => { successSound(); }
-            }
+            { question: 'Администратор: «Первое правило: незнакомец предлагает открыть файл — что делаешь?»',
+              options: [
+                  { key: '1', text: 'Открою, интересно же', correct: false },
+                  { key: '2', text: 'Откажусь и заблокирую', correct: true }
+              ],
+              wrongReply: 'Ты уже открыл его... он внутри тебя.',
+              correctReply: 'Умно. Ты можешь выжить.',
+              wrongSanity: -15, correctSanity: 0 },
+            { question: 'Маша: «Он стучит в мою дверь. Что мне делать?»',
+              options: [
+                  { key: '1', text: 'Открой — может, это помощь', correct: false },
+                  { key: '2', text: 'Не открывай и вызови помощь', correct: true }
+              ],
+              wrongReply: 'Она открыла. Я слышу её крик.',
+              correctReply: 'Она закрылась. Но он уже внутри.',
+              wrongSanity: -20, correctSanity: -5 },
+            { question: 'Голос: «Ты хочешь увидеть его лицо?»',
+              options: [
+                  { key: '1', text: 'Да, покажи себя', correct: false },
+                  { key: '2', text: 'Нет, уйди', correct: true }
+              ],
+              wrongReply: 'Поздно. Он в твоём экране.',
+              correctReply: 'Ты отверг его. Но он вернётся.',
+              wrongSanity: -25, correctSanity: 0,
+              onWrong: () => { triggerGlitch(2); flashScreen('red'); scareSound(); },
+              onCorrect: () => { successSound(); } }
         ],
         3: [
-            {
-                question: '??? : «Катя тоже была любопытной. Хочешь знать, что с ней стало?»',
-                options: [
-                    { key: '1', text: 'Да, расскажи', correct: false },
-                    { key: '2', text: 'Не хочу знать', correct: true }
-                ],
-                wrongReply: 'Она открыла мне дверь. Теперь она часть меня.',
-                correctReply: 'Хорошо. Незнание — спасение.',
-                wrongSanity: -20, correctSanity: -3,
-                unlockContact: 'kate'
-            },
-            {
-                question: 'Маша: «Я вижу тебя через веб-камеру. Скажи что-нибудь.»',
-                options: [
-                    { key: '1', text: 'Привет, я тут', correct: false },
-                    { key: '2', text: 'Закрой камеру немедленно', correct: true }
-                ],
-                wrongReply: 'Теперь я знаю твоё лицо.',
-                correctReply: 'Слишком поздно для меня, но не для тебя.',
-                wrongSanity: -25, correctSanity: -8,
-                onWrong: () => { recordVoice(1000); }  // записываем голос игрока!
-            },
-            {
-                question: 'Павел: «Он предлагает мне удалить аккаунт. Что делать?»',
-                options: [
-                    { key: '1', text: 'Удаляй, это выход', correct: false },
-                    { key: '2', text: 'Не удаляй, он этого и хочет', correct: true }
-                ],
-                wrongReply: 'Павел удалился. Я займу его место.',
-                correctReply: 'Павел исчез со связи. Надеюсь, он жив.',
-                wrongSanity: -18, correctSanity: -5,
-                onWrong: () => {
-                    // Павел пропадает из контактов
-                    const p = document.querySelector('[data-user="pavel"]');
-                    if (p) p.style.opacity = '0.3';
-                }
-            },
-            {
-                question: '??? : «Ты читал мой notes.txt? Хочешь прочитать настоящий?»',
-                options: [
-                    { key: '1', text: 'Да, покажи', correct: false },
-                    { key: '2', text: 'Мне хватило первого', correct: true }
-                ],
-                wrongReply: 'Вот он. Теперь ты знаешь слишком много.',
-                correctReply: 'Умно. Продолжай скрываться.',
-                wrongSanity: -22, correctSanity: 0,
-                onWrong: () => { addToInventory('📄 Настоящий notes.txt'); }
-            }
+            { question: '??? : «Катя тоже была любопытной. Хочешь знать, что с ней стало?»',
+              options: [
+                  { key: '1', text: 'Да, расскажи', correct: false },
+                  { key: '2', text: 'Не хочу знать', correct: true }
+              ],
+              wrongReply: 'Она открыла мне дверь. Теперь она часть меня.',
+              correctReply: 'Хорошо. Незнание — спасение.',
+              wrongSanity: -20, correctSanity: -3, unlockContact: 'kate' },
+            { question: 'Маша: «Я вижу тебя через веб-камеру. Скажи что-нибудь.»',
+              options: [
+                  { key: '1', text: 'Привет, я тут', correct: false },
+                  { key: '2', text: 'Закрой камеру немедленно', correct: true }
+              ],
+              wrongReply: 'Теперь я знаю твоё лицо.',
+              correctReply: 'Слишком поздно для меня, но не для тебя.',
+              wrongSanity: -25, correctSanity: -8,
+              onWrong: () => { recordVoice(1000); } },
+            { question: 'Павел: «Он предлагает мне удалить аккаунт. Что делать?»',
+              options: [
+                  { key: '1', text: 'Удаляй, это выход', correct: false },
+                  { key: '2', text: 'Не удаляй, он этого и хочет', correct: true }
+              ],
+              wrongReply: 'Павел удалился. Я займу его место.',
+              correctReply: 'Павел исчез со связи. Надеюсь, он жив.',
+              wrongSanity: -18, correctSanity: -5 },
+            { question: '??? : «Ты читал мой notes.txt? Хочешь прочитать настоящий?»',
+              options: [
+                  { key: '1', text: 'Да, покажи', correct: false },
+                  { key: '2', text: 'Мне хватило первого', correct: true }
+              ],
+              wrongReply: 'Вот он. Теперь ты знаешь слишком много.',
+              correctReply: 'Умно. Продолжай скрываться.',
+              wrongSanity: -22, correctSanity: 0,
+              onWrong: () => { addToInventory('📄 Настоящий notes.txt'); } }
         ],
         4: [
-            {
-                question: 'Админ (голос с помехами): «Я вижу тебя. Ты не один в комнате.»',
-                options: [
-                    { key: '1', text: 'Обернуться', correct: false },
-                    { key: '2', text: 'Не двигаться', correct: true }
-                ],
-                wrongReply: 'Ты обернулся. Он был там.',
-                correctReply: 'Хорошо. Ты не дал ему понять, что видишь.',
-                wrongSanity: -30, correctSanity: -5,
-                onWrong: () => { jumpscareQuick(); }
-            },
-            {
-                question: 'Ольга: «Он уже убил троих. Хочешь остановить его?»',
-                options: [
-                    { key: '1', text: 'Да, скажи как', correct: false },
-                    { key: '2', text: 'Нет, это не моё дело', correct: true }
-                ],
-                wrongReply: 'Теперь ты в списке. Ты следующий.',
-                correctReply: 'Ты не в списке. Пока что.',
-                wrongSanity: -20, correctSanity: 0,
-                unlockContact: 'max'
-            },
-            {
-                question: '??? : «Ты знаешь, что QIP больше не существует с 2013 года?»',
-                options: [
-                    { key: '1', text: 'Что?! Как я в нём?', correct: false },
-                    { key: '2', text: 'Это не важно', correct: true }
-                ],
-                wrongReply: 'Ты в ловушке. Всегда был.',
-                correctReply: 'Хорошо. Не задавай лишних вопросов.',
-                wrongSanity: -25, correctSanity: -5,
-                onWrong: () => { flashScreen('red'); triggerGlitch(2); }
-            },
-            {
-                question: 'Максим: «Админ мёртв. Ты говоришь с ним через ???. Пойми это.»',
-                options: [
-                    { key: '1', text: 'Не верю тебе', correct: false },
-                    { key: '2', text: 'Теперь понимаю', correct: true }
-                ],
-                wrongReply: 'Ты не хочешь понимать. Он покажет тебе.',
-                correctReply: 'Хорошо. Ты готов к финалу.',
-                wrongSanity: -28, correctSanity: -10,
-                onWrong: () => { scareSound(); }
-            }
+            { question: 'Админ (голос с помехами): «Я вижу тебя. Ты не один в комнате.»',
+              options: [
+                  { key: '1', text: 'Обернуться', correct: false },
+                  { key: '2', text: 'Не двигаться', correct: true }
+              ],
+              wrongReply: 'Ты обернулся. Он был там.',
+              correctReply: 'Хорошо. Ты не дал ему понять, что видишь.',
+              wrongSanity: -30, correctSanity: -5,
+              onWrong: () => { jumpscareQuick(); } },
+            { question: 'Ольга: «Он уже убил троих. Хочешь остановить его?»',
+              options: [
+                  { key: '1', text: 'Да, скажи как', correct: false },
+                  { key: '2', text: 'Нет, это не моё дело', correct: true }
+              ],
+              wrongReply: 'Теперь ты в списке. Ты следующий.',
+              correctReply: 'Ты не в списке. Пока что.',
+              wrongSanity: -20, correctSanity: 0, unlockContact: 'max' },
+            { question: '??? : «Ты знаешь, что QIP больше не существует с 2013 года?»',
+              options: [
+                  { key: '1', text: 'Что?! Как я в нём?', correct: false },
+                  { key: '2', text: 'Это не важно', correct: true }
+              ],
+              wrongReply: 'Ты в ловушке. Всегда был.',
+              correctReply: 'Хорошо. Не задавай лишних вопросов.',
+              wrongSanity: -25, correctSanity: -5,
+              onWrong: () => { flashScreen('red'); triggerGlitch(2); } },
+            { question: 'Максим: «Админ мёртв. Ты говоришь с ним через ???. Пойми это.»',
+              options: [
+                  { key: '1', text: 'Не верю тебе', correct: false },
+                  { key: '2', text: 'Теперь понимаю', correct: true }
+              ],
+              wrongReply: 'Ты не хочешь понимать. Он покажет тебе.',
+              correctReply: 'Хорошо. Ты готов к финалу.',
+              wrongSanity: -28, correctSanity: -10,
+              onWrong: () => { scareSound(); } }
         ],
         5: [
-            {
-                question: 'ФИНАЛЬНЫЙ ВОПРОС. ??? : «Ты — мой?»',
-                options: [
-                    { key: '1', text: 'Да, я твой', correct: false },
-                    { key: '2', text: 'Нет. Я свободен.', correct: true }
-                ],
-                wrongReply: 'Ты мой. Ты всегда был моим. Добро пожаловать домой.',
-                correctReply: 'Нет... НЕТ! Ты не можешь! ТЫ НЕ МОЖЕШЬ!!!',
-                wrongSanity: -50, correctSanity: 20,
-                onWrong: () => { setTimeout(jumpscareEffect, 2000); },
-                onCorrect: () => { setTimeout(bestEnding, 3000); }
-            }
+            { question: 'ФИНАЛЬНЫЙ ВОПРОС. ??? : «Ты — мой?»',
+              options: [
+                  { key: '1', text: 'Да, я твой', correct: false },
+                  { key: '2', text: 'Нет. Я свободен.', correct: true }
+              ],
+              wrongReply: 'Ты мой. Ты всегда был моим. Добро пожаловать домой.',
+              correctReply: 'Нет... НЕТ! Ты не можешь! ТЫ НЕ МОЖЕШЬ!!!',
+              wrongSanity: -50, correctSanity: 20,
+              onWrong: () => { setTimeout(jumpscareEffect, 2000); },
+              onCorrect: () => { setTimeout(bestEnding, 3000); } }
         ]
     };
 
     async function runAct2() {
         setAct(2);
-        setObjective('пройти тестирование (5 вопросов)');
+        setObjective('пройти тестирование');
         showNotification('⚡ АКТ II — Тестирование началось');
-
         await wait(2000);
         await runQuizSequence(QUIZ_ACTS[2]);
-
-        // После теста
         showAchievement('Прошёл Акт II');
-        await wait(3000);
+        await wait(2000);
+        await playCutscene('act3');
         runAct3();
     }
 
     async function runAct3() {
         setAct(3);
         setObjective('разобраться в исчезновении контактов');
-        showNotification('⚡ АКТ III — Контакты исчезают');
-
+        showNotification('💀 АКТ III — Контакты исчезают');
         unlockContact('olga');
 
         const script = [
-            { user: 'admin', delay: 2000, switchTo: 'admin', text: 'Слушай... я не уверен, что это я.', type: 'creepy' },
-            { user: 'admin', delay: 6000, text: 'Вчера я проснулся в 3:33. Мой QIP был открыт. Я писал тебе, но не помню.', type: 'creepy' },
-            { user: 'admin', delay: 11000, text: 'Проверь мои фото. IMG_2013.jpg там не было раньше.', type: 'them' },
-            { user: 'admin', delay: 16000, text: 'Проверь.', type: 'them', action: () => {
-                // Активируем проклятое фото
+            { delay: 2000, switchTo: 'admin', text: 'Слушай... я не уверен, что это я.', type: 'creepy' },
+            { delay: 6000, text: 'Вчера я проснулся в 3:33. Мой QIP был открыт. Я писал тебе, но не помню.', type: 'creepy' },
+            { delay: 11000, text: 'Проверь мои фото. IMG_2013.jpg там не было раньше.', type: 'them' },
+            { delay: 16000, text: 'Проверь.', type: 'them', action: () => {
                 const img = document.querySelector('[data-img="5"]');
                 if (img) img.classList.add('haunted-img');
             }},
-
-            // Маша пропадает
-            { user: 'masha', delay: 22000, switchTo: 'masha', text: 'Он здесь.', type: 'creepy' },
-            { user: 'masha', delay: 24000, text: 'Он за моей спиной.', type: 'creepy', sanity: -10 },
-            { user: 'masha', delay: 26000, text: 'ПРОЩАЙ', type: 'creepy', action: () => {
-                // Маша пропадает
+            { delay: 22000, switchTo: 'masha', text: 'Он здесь.', type: 'creepy' },
+            { delay: 24000, text: 'Он за моей спиной.', type: 'creepy', sanity: -10 },
+            { delay: 26000, text: 'ПРОЩАЙ', type: 'creepy', action: () => {
                 const m = document.querySelector('[data-user="masha"]');
                 if (m) {
-                    const status = m.querySelector('.status');
-                    status.textContent = 'не в сети';
-                    status.classList.add('offline');
+                    const s = m.querySelector('.status');
+                    s.textContent = 'не в сети';
+                    s.classList.add('offline');
                     m.classList.add('locked');
                 }
                 showNotification('💀 Маша отключилась');
             }},
-
-            { user: 'admin', delay: 32000, switchTo: 'admin', text: 'Маша пропала. Её аккаунт удалён.', type: 'them' },
-            { user: 'admin', delay: 37000, text: 'Слушай, я должен тебе кое-что показать.', type: 'them' },
-            { user: 'admin', delay: 42000, text: 'В QIP есть скрытая папка с файлами. Я не могу её открыть.', type: 'them', setObjective: 'изучить скрытые файлы' },
-            { user: 'admin', delay: 48000, text: 'Ты можешь? Попробуй открыть последнюю фотку.', type: 'them' },
-            { user: 'admin', delay: 53000, text: 'Осторожно. Что бы ты ни увидел — не кричи.', type: 'creepy', action: () => {
-                // Автоматически открыть фото ???? если игрок сам не открыл через 30 сек — принудительно
-                setTimeout(() => {
-                    if (state.act < 4) {
-                        openImage('5');
-                    }
-                }, 30000);
+            { delay: 32000, switchTo: 'admin', text: 'Маша пропала. Её аккаунт удалён.', type: 'them' },
+            { delay: 37000, text: 'Слушай, я должен тебе кое-что показать.', type: 'them' },
+            { delay: 42000, text: 'В QIP есть скрытая папка с файлами. Я не могу её открыть.', type: 'them', setObjective: 'изучить скрытые файлы' },
+            { delay: 48000, text: 'Ты можешь? Попробуй открыть последнюю фотку.', type: 'them' },
+            { delay: 53000, text: 'Осторожно. Что бы ты ни увидел — не кричи.', type: 'creepy', action: () => {
+                setTimeout(() => { if (state.act < 4) openImage('5'); }, 30000);
             }},
-            { user: 'admin', delay: 60000, text: 'Ну что, готов к правде?', type: 'them', action: () => {
+            { delay: 60000, text: 'Ну что, готов к правде?', type: 'them', action: async () => {
                 showNotification('⏭ АКТ III завершён');
-                setTimeout(() => runAct4(), 5000);
+                await wait(2000);
+                await playCutscene('act4');
+                runAct4();
             }}
         ];
         await playScript(script);
@@ -1013,48 +1047,45 @@
     async function runAct4() {
         setAct(4);
         setObjective('выжить. Он охотится.');
-        showNotification('💀 АКТ IV — ОХОТА');
+        showNotification('👁️ АКТ IV — ОХОТА');
         unlockContact('max');
 
         const script = [
-            { user: 'admin', delay: 2000, switchTo: 'admin', text: 'Я... не помню, что было последние 3 часа.', type: 'creepy' },
-            { user: 'admin', delay: 6000, text: 'Мой статус меняется. Я вижу себя как "не существует".', type: 'creepy' },
-
-            { user: 'max', delay: 12000, switchTo: 'max', text: 'Привет. Ты друг админа?', type: 'them' },
-            { user: 'max', delay: 16000, text: 'Я вижу его QIP онлайн, но он не отвечает.', type: 'them' },
-            { user: 'max', delay: 20000, text: 'Я был в его квартире час назад. Он сидит перед монитором и не двигается.', type: 'them' },
-            { user: 'max', delay: 24000, text: 'И знаешь что? На его экране открыт чат с ТОБОЙ.', type: 'creepy' },
-
-            { user: 'olga', delay: 30000, switchTo: 'olga', text: 'Я знаю, кто такой ???', type: 'them' },
-            { user: 'olga', delay: 34000, text: 'Это не человек. Это то, что осталось от пользователей, которые не вышли из QIP в 2013.', type: 'them' },
-            { user: 'olga', delay: 38000, text: 'Их души застряли в системе. И теперь они ищут компанию.', type: 'them' },
-            { user: 'olga', delay: 42000, text: 'Ты можешь выйти. Но сначала должен пройти финальный тест.', type: 'them', addInventory: '🗝️ Ключ от QIP' },
-            { user: 'olga', delay: 46000, text: 'Отвечай правильно на ВСЕ вопросы. Тогда ты свободен.', type: 'them' },
-
-            { user: 'unknown', delay: 54000, switchTo: 'unknown', text: 'Ты готов?', type: 'creepy', action: () => {
-                // Открыть ??? контакт
+            { delay: 2000, switchTo: 'admin', text: 'Я... не помню, что было последние 3 часа.', type: 'creepy' },
+            { delay: 6000, text: 'Мой статус меняется. Я вижу себя как "не существует".', type: 'creepy' },
+            { delay: 12000, switchTo: 'max', text: 'Привет. Ты друг админа?', type: 'them' },
+            { delay: 16000, text: 'Я вижу его QIP онлайн, но он не отвечает.', type: 'them' },
+            { delay: 20000, text: 'Я был в его квартире час назад. Он сидит перед монитором и не двигается.', type: 'them' },
+            { delay: 24000, text: 'И знаешь что? На его экране открыт чат с ТОБОЙ.', type: 'creepy' },
+            { delay: 30000, switchTo: 'olga', text: 'Я знаю, кто такой ???', type: 'them' },
+            { delay: 34000, text: 'Это не человек. Это то, что осталось от пользователей, которые не вышли из QIP в 2013.', type: 'them' },
+            { delay: 38000, text: 'Их души застряли в системе. И теперь они ищут компанию.', type: 'them' },
+            { delay: 42000, text: 'Ты можешь выйти. Но сначала должен пройти финальный тест.', type: 'them', addInventory: '🗝️ Ключ от QIP' },
+            { delay: 46000, text: 'Отвечай правильно на ВСЕ вопросы. Тогда ты свободен.', type: 'them' },
+            { delay: 54000, switchTo: 'unknown', text: 'Ты готов?', type: 'creepy', action: () => {
                 unlockContact('unknown');
                 const u = document.querySelector('[data-user="unknown"]');
                 if (u) {
-                    const status = u.querySelector('.status');
-                    status.textContent = 'он в сети';
-                    status.classList.add('online-red');
+                    const s = u.querySelector('.status');
+                    s.textContent = 'он в сети';
+                    s.classList.add('online-red');
                     u.classList.remove('locked');
                 }
                 state.unknownUnlocked = true;
             }},
-            { user: 'unknown', delay: 58000, text: 'Хорошо. Начнём.', type: 'creepy' },
-            { user: 'unknown', delay: 60000, text: 'Но сначала — маленькая игра.', type: 'creepy', action: () => {
-                // Несколько случайных глитчей
+            { delay: 58000, text: 'Хорошо. Начнём.', type: 'creepy' },
+            { delay: 60000, text: 'Но сначала — маленькая игра.', type: 'creepy', action: () => {
                 for (let i = 0; i < 5; i++) {
                     setTimeout(() => triggerGlitch(2), i * 800);
                     setTimeout(whisperSound, i * 800 + 200);
                 }
                 scareSound();
             }},
-            { user: 'unknown', delay: 66000, text: 'Готов?', type: 'creepy', action: () => {
+            { delay: 66000, text: 'Готов?', type: 'creepy', action: async () => {
                 showNotification('⏭ АКТ IV завершён');
-                setTimeout(() => runAct5(), 5000);
+                await wait(2000);
+                await playCutscene('act5');
+                runAct5();
             }}
         ];
         await playScript(script);
@@ -1062,21 +1093,18 @@
 
     async function runAct5() {
         setAct(5);
-        setObjective('пройти ФИНАЛЬНЫЙ тест и выжить');
+        setObjective('пройти ФИНАЛЬНЫЙ тест');
         showNotification('🔥 АКТ V — ФИНАЛ');
-
         await wait(2000);
         await runQuizSequence(QUIZ_ACTS[5]);
     }
 
-    // Универсальный запуск теста (вопрос за вопросом)
     async function runQuizSequence(questions) {
         for (let i = 0; i < questions.length; i++) {
             state.totalQuestions++;
             state.save.totalQuestions = state.totalQuestions;
             const q = questions[i];
 
-            // Открыть чат с ??? если есть
             if (state.currentUser !== 'unknown' && state.unknownUnlocked) {
                 const u = document.querySelector('[data-user="unknown"]');
                 if (u) u.click();
@@ -1091,7 +1119,6 @@
             const choice = await askChoice(q);
 
             if (choice) {
-                // Правильный
                 state.correctAnswers++;
                 state.save.correctAnswers = state.correctAnswers;
                 saveGame();
@@ -1104,7 +1131,6 @@
                 if (q.unlockContact) unlockContact(q.unlockContact);
                 if (q.addInventory) addToInventory(q.addInventory);
             } else {
-                // Неправильный
                 addMessage(q._clicked.text, 'me');
                 await wait(800);
                 addMessage(q.wrongReply, 'creepy');
@@ -1122,22 +1148,14 @@
             await wait(1500);
         }
 
-        // Все вопросы пройдены
         await wait(2000);
         addMessage('СИСТЕМА: Тестирование завершено.', 'system');
-
         await wait(1500);
 
-        // Проверка финала
         const percent = state.correctAnswers / state.totalQuestions;
-        if (state.totalQuestions >= 10 && percent === 1) {
-            // Идеально — лучшая концовка
-            bestEnding();
-        } else if (percent >= 0.7) {
-            // Хорошая концовка
-            goodEnding();
-        } else {
-            // Плохая концовка
+        if (state.totalQuestions >= 10 && percent === 1) bestEnding();
+        else if (percent >= 0.7) goodEnding();
+        else {
             await wait(2000);
             addMessage('??? : ты не прошёл проверку.', 'creepy');
             await wait(2500);
@@ -1155,8 +1173,17 @@
             label.className = 'chat-choice-label';
             label.textContent = '▸ ВЫБЕРИ ОТВЕТ';
             container.appendChild(label);
-
             let resolved = false;
+            let resolvedValue = null;
+            const finalize = (v) => {
+                if (resolved) return;
+                resolved = true;
+                resolvedValue = v;
+                document.removeEventListener('keydown', keyHandler);
+                D.messageInput.disabled = false;
+                D.sendBtn.disabled = false;
+                resolve(v);
+            };
 
             q.options.forEach(opt => {
                 const btn = document.createElement('button');
@@ -1165,18 +1192,17 @@
                 btn.innerHTML = `<span class="key">${opt.key}</span><span>${opt.text}</span>`;
                 btn.addEventListener('click', () => {
                     if (resolved) return;
-                    resolved = true;
                     container.querySelectorAll('.chat-choice-btn').forEach(b => {
                         b.disabled = true;
                         b.style.cursor = 'default';
                     });
                     if (opt.correct) {
                         btn.classList.add('correct');
-                        resolve(opt);
+                        finalize(opt);
                     } else {
                         btn.classList.add('wrong');
                         q._clicked = opt;
-                        resolve(null);
+                        finalize(null);
                     }
                 });
                 container.appendChild(btn);
@@ -1187,27 +1213,15 @@
             D.messageInput.disabled = true;
             D.sendBtn.disabled = true;
 
-            // Горячие клавиши 1/2
             const keyHandler = e => {
                 if (resolved) return;
-                if (e.key === '1') {
-                    const btn = container.querySelectorAll('.chat-choice-btn')[0];
-                    if (btn) btn.click();
-                } else if (e.key === '2') {
-                    const btn = container.querySelectorAll('.chat-choice-btn')[1];
-                    if (btn) btn.click();
+                if (e.key === '1' || e.key === '2') {
+                    const idx = e.key === '1' ? 0 : 1;
+                    const btns = container.querySelectorAll('.chat-choice-btn');
+                    if (btns[idx]) btns[idx].click();
                 }
             };
             document.addEventListener('keydown', keyHandler);
-
-            // После клика вернуть поле
-            const origResolve = resolve;
-            resolve = function(v) {
-                document.removeEventListener('keydown', keyHandler);
-                D.messageInput.disabled = false;
-                D.sendBtn.disabled = false;
-                origResolve(v);
-            };
         });
     }
 
@@ -1215,27 +1229,16 @@
     async function jumpscareEffect(cause = 'normal') {
         if (!state.gameStarted) return;
         state.paused = true;
-
-        // Записываем голос игрока
         await recordVoice(1000);
-
         scareSound();
-        setTimeout(() => {
-            // Воспроизводим записанный голос
-            if (state.recordedAudioURL) playRecordedVoice();
-        }, 300);
-
+        setTimeout(() => { if (state.recordedAudioURL) playRecordedVoice(); }, 300);
         flashScreen('red');
         D.jumpscare.classList.remove('hidden');
-
-        // Усиливаем эффекты
         document.body.style.filter = 'invert(1) contrast(2)';
-
         setTimeout(() => {
             document.body.style.filter = '';
             D.jumpscare.classList.add('hidden');
             D.fadeOverlay.classList.add('active');
-
             setTimeout(() => {
                 state.save.deaths++;
                 saveGame();
@@ -1255,19 +1258,16 @@
 
     // ==================== ENDINGS ====================
     function showEnding(type, cause) {
-        clearSave();
         stopMusic();
         setDroneIntensity(0.01);
-
-        const stats = `
+        D.ending.classList.remove('hidden');
+        D.endingNameInput.style.display = 'flex';
+        D.endingStats.innerHTML = `
             💀 Смертей: ${state.save.deaths} · 🟢 Спасений: ${state.save.survived} · 🏆 Побед: ${state.save.best}<br>
             ⏱ Время игры: ${formatTime(state.gameTime)}<br>
-            📊 Правильных ответов: ${state.correctAnswers}/${state.totalQuestions}
+            📊 Правильных: ${state.correctAnswers}/${state.totalQuestions}<br>
+            🎖️ Достижений: ${state.save.achievements.length}
         `;
-
-        D.ending.classList.remove('hidden');
-        D.endingStats.innerHTML = stats;
-
         if (type === 'death') {
             D.endingTitle.textContent = 'ТЫ УМЕР';
             D.endingText.textContent = cause === 'sanity' ?
@@ -1277,46 +1277,37 @@
     }
 
     function goodEnding() {
-        clearSave();
         stopMusic();
         state.save.survived++;
-        localStorage.setItem(SAVE_KEY, JSON.stringify(state.save));
-
+        saveGame();
+        D.ending.classList.remove('hidden');
+        D.endingNameInput.style.display = 'flex';
         D.endingTitle.textContent = 'ТЫ ВЫЖИЛ';
-        D.endingTitle.style.color = '#0c4';
-        D.endingText.textContent =
-            `Ты ответил правильно на ${state.correctAnswers} из ${state.totalQuestions}. ` +
-            `Он ушёл... пока что. Но ты знаешь, что он вернётся.`;
+        D.endingText.textContent = `Ты ответил правильно на ${state.correctAnswers} из ${state.totalQuestions}. Он ушёл... пока что.`;
         D.endingStats.innerHTML = `
             🟢 Спасений: ${state.save.survived} · 💀 Смертей: ${state.save.deaths}<br>
             ⏱ Время игры: ${formatTime(state.gameTime)}<br>
             📊 Результат: ${state.correctAnswers}/${state.totalQuestions}
         `;
-        D.ending.classList.remove('hidden');
         D.ending.querySelector('h1').style.color = '#0c4';
     }
 
     function bestEnding() {
-        clearSave();
         stopMusic();
         state.save.best++;
-        localStorage.setItem(SAVE_KEY, JSON.stringify(state.save));
+        saveGame();
         successSound();
-
+        D.ending.classList.remove('hidden');
+        D.endingNameInput.style.display = 'flex';
         D.endingTitle.textContent = '🏆 ТЫ ЕГО ПОБЕДИЛ';
         D.endingTitle.style.color = '#fc0';
-        D.endingText.innerHTML =
-            `Ты ответил правильно на ВСЕ ${state.totalQuestions} вопросов!<br><br>` +
-            `Контакт "???" удалён из системы навсегда.<br>` +
-            `Ты — первый, кто смог выйти из QIP живым.`;
+        D.endingText.innerHTML = `Ты ответил правильно на ВСЕ ${state.totalQuestions} вопросов!<br><br>Контакт "???" удалён из системы навсегда.`;
         D.endingStats.innerHTML = `
             🏆 Побед: ${state.save.best} · 💀 Смертей: ${state.save.deaths}<br>
             ⏱ Время игры: ${formatTime(state.gameTime)}<br>
-            📊 Идеально: ${state.correctAnswers}/${state.totalQuestions}<br><br>
-            🎖️ Открыто достижений: ${state.save.achievements.length}
+            📊 Идеально: ${state.correctAnswers}/${state.totalQuestions}<br>
+            🎖️ Достижений: ${state.save.achievements.length}
         `;
-        D.ending.classList.remove('hidden');
-        D.ending.querySelector('h1').style.color = '#fc0';
         setTimeout(() => showAchievement('Легенда QIP'), 500);
     }
 
@@ -1336,19 +1327,16 @@
             w.classList.add('visible');
             w.classList.remove('minimized');
         });
-
         if (!state.openedApps.has(appId)) {
             state.openedApps.add(appId);
             const item = document.createElement('div');
             item.className = 'taskbar-item visible';
             item.dataset.target = appId;
             const titles = {
-                'qip-window': '💬 QIP 2012',
-                'gallery-window': '📷 Мои фото',
-                'notes-window': '📝 Блокнот',
-                'browser-window': '🌐 Internet',
-                'encyclopedia-window': '📖 Справочник',
-                'image-viewer': '🖼️ Просмотр'
+                'qip-window': '💬 QIP 2012', 'gallery-window': '📷 Фото',
+                'notes-window': '📝 Блокнот', 'browser-window': '🌐 Internet',
+                'encyclopedia-window': '📖 Справочник', 'image-viewer': '🖼️ Просмотр',
+                'leaderboard-window': '🏆 Лидерборд'
             };
             item.textContent = titles[appId] || '📄 Окно';
             item.addEventListener('click', () => toggleApp(appId));
@@ -1375,7 +1363,6 @@
         resumeAudio();
     }
 
-    // Обработчики кнопок окон
     document.addEventListener('click', e => {
         if (e.target.matches('.window-controls .close')) {
             const target = e.target.dataset.target;
@@ -1389,10 +1376,64 @@
             closeApp(target);
         }
         if (e.target.matches('.window-controls .min')) {
-            const target = e.target.dataset.target;
-            const w = $(target);
+            const w = $(e.target.dataset.target);
             if (w) w.classList.add('minimized');
         }
+    });
+
+    // ==================== LOCATIONS ====================
+    const ROOM_DESCRIPTIONS = {
+        desk: 'Ты в комнате перед компьютером. Свет мигает.',
+        kitchen: 'Кухня. Холодильник гудит. Что-то шевелится за столом.',
+        hallway: 'Коридор. Свет выключен. Дверь закрыта.',
+        bathroom: 'Ванная. Зеркало отражает не тебя.',
+        basement: 'Подвал. Темнота смотрит на тебя.'
+    };
+
+    document.querySelectorAll('.map-room').forEach(el => {
+        el.addEventListener('click', () => {
+            const room = el.dataset.room;
+            if (el.classList.contains('locked')) {
+                showNotification('🔒 Локация заблокирована');
+                return;
+            }
+            if (room === 'desk') {
+                D.roomView.classList.add('hidden');
+                updateLocation('desk');
+                return;
+            }
+            showRoom(room);
+        });
+    });
+
+    function showRoom(room) {
+        if (room === 'basement' && !state.save.unlockedRooms.includes('basement')) {
+            showNotification('🔒 Подвал закрыт');
+            return;
+        }
+        updateLocation(room);
+        D.roomView.classList.remove('hidden');
+        const icons = {
+            kitchen: '🍳', hallway: '🚪', bathroom: '🚿', basement: '🕳️'
+        };
+        D.roomContent.innerHTML = `
+            <div>${icons[room] || '❓'}</div>
+            <div class="room-desc">${ROOM_DESCRIPTIONS[room] || ''}</div>
+        `;
+        if (room === 'bathroom') {
+            whisperSound();
+            updateSanity(-3);
+        }
+        if (room === 'basement') {
+            scareSound();
+            triggerGlitch(2);
+            updateSanity(-10);
+        }
+    }
+
+    D.roomExit.addEventListener('click', () => {
+        D.roomView.classList.add('hidden');
+        updateLocation('desk');
     });
 
     // ==================== ICONS ====================
@@ -1406,15 +1447,51 @@
         else if (id === 'icon-notes') openApp('notes-window');
         else if (id === 'icon-browser') openApp('browser-window');
         else if (id === 'icon-encyclopedia') openApp('encyclopedia-window');
-        else if (id === 'icon-mine') showNotification('💣 Сапёр: все мины уже взорвались. Не сейчас.');
+        else if (id === 'icon-mine') showNotification('💣 Сапёр: все мины уже взорвались.');
         else if (id === 'icon-recycle') {
             if (state.save.best > 0) showNotification('🗑️ Ты победил. Корзина пуста.');
-            else {
-                showNotification('🗑️ В корзине 4 удалённых контакта...');
-                setTimeout(() => triggerGlitch(), 800);
+            else { showNotification('🗑️ В корзине 4 удалённых контакта...'); setTimeout(() => triggerGlitch(), 800); }
+        } else if (id === 'icon-fridge') {
+            showNotification('🧊 Холодильник открыт. Внутри записка: "он видит тебя"');
+            addToInventory('📝 Записка из холодильника');
+            updateSanity(-5);
+        } else if (id === 'icon-mirror') {
+            showNotification('🪞 Зеркало треснуло само.');
+            triggerGlitch(2);
+            scareSound();
+            updateSanity(-8);
+        } else if (id === 'icon-door') {
+            if (state.act >= 4) {
+                showNotification('🚪 Дверь заперта. Он не выпустит тебя.');
+                scareSound();
+                updateSanity(-5);
+            } else {
+                showNotification('🚪 Ты вышел в коридор.');
+                showRoom('hallway');
             }
         }
     });
+
+    // Показать иконки текущей комнаты
+    function updateIconsVisibility() {
+        $$('.desktop-icon').forEach(el => {
+            const room = el.dataset.room || 'desk';
+            if (room === state.currentRoom || (state.currentRoom === 'desk' && room === 'desk')) {
+                el.classList.add('visible');
+            } else if (room === 'desk' && state.currentRoom === 'desk') {
+                el.classList.add('visible');
+            } else {
+                el.classList.remove('visible');
+            }
+        });
+    }
+
+    // Переопределим updateLocation для иконок
+    const _origUpdateLocation = updateLocation;
+    updateLocation = function(loc) {
+        _origUpdateLocation(loc);
+        updateIconsVisibility();
+    };
 
     // ==================== GALLERY ====================
     const IMAGES = {
@@ -1429,9 +1506,7 @@
                 updateSanity(-10);
                 setTimeout(() => {
                     addMessage('СИСТЕМА: Обнаружено вложение IMG_2013.jpg', 'system');
-                    if (state.currentUser) {
-                        addMessage('??? : теперь ты видел меня.', 'creepy');
-                    }
+                    if (state.currentUser) addMessage('??? : теперь ты видел меня.', 'creepy');
                     triggerGlitch();
                     setDroneIntensity(0.18);
                     scareSound();
@@ -1502,26 +1577,14 @@ P.P.S. В финале — не отвечай "да". Никогда.`;
             <p>Последняя версия QIP 2012 доступна для загрузки.</p>
             <p><b>Внимание:</b> начиная с 2013 года серверы QIP не поддерживаются.</p>
             <p class="glitch-text">Он всё ещё работает. Где-то. Внутри.</p>
-            <h2>Известные проблемы</h2>
-            <p>— Контакт "???" не отображается в списке контактов.<br>
-            — Сообщения от него приходят, даже когда программа закрыта.<br>
-            — <span class="redacted">ДАННЫЕ УДАЛЕНЫ</span></p>
         `,
         'http://wiki/qip': `
             <h1>QIP 2012 — История</h1>
-            <p>QIP (Quiet Internet Pager) — популярный мессенджер в России в 2008-2013 годах.</p>
+            <p>QIP — популярный мессенджер в России в 2008-2013 годах.</p>
             <h2>Происшествия</h2>
-            <p>В 2013 году были зафиксированы случаи, когда пользователи QIP сообщали о странных контактах с ником "???"</p>
-            <p>Все они впоследствии прекратили использовать интернет. Судьба их неизвестна.</p>
+            <p>В 2013 году были зафиксированы случаи странных контактов с ником "???".</p>
+            <p>Все они впоследствии прекратили использовать интернет.</p>
             <p class="glitch-text">Он всё ещё ищет.</p>
-        `,
-        'http://forum/qip': `
-            <h1>Форум QIP — "Странный контакт ???"</h1>
-            <p><b>User_Anon:</b> Кто-нибудь видел контакт ??? У меня появился вчера. Пишет странные вещи.</p>
-            <p><b>Admin_X:</b> Не отвечай ему. Просто заблокируй.</p>
-            <p><b>User_Anon:</b> Уже поздно. Он знает моё имя.</p>
-            <p><b>Admin_X:</b> Тогда беги. <span class="redacted">Не выходи из дома ночью.</span></p>
-            <p><b>System:</b> Тема закрыта. Пользователь User_Anon больше не заходил.</p>
         `
     };
 
@@ -1529,14 +1592,14 @@ P.P.S. В финале — не отвечай "да". Никогда.`;
 
     // ==================== ENCYCLOPEDIA ====================
     const ENCYCLOPEDIA = [
-        { id: 'qip', title: 'QIP 2012', text: 'Мессенджер, популярный в 2008-2013. Содержит скрытые функции.' },
-        { id: 'admin', title: 'Администратор', text: 'Пользователь, первым столкнувшийся с контактом "???".' },
+        { id: 'qip', title: 'QIP 2012', text: 'Мессенджер, популярный в 2008-2013.' },
+        { id: 'admin', title: 'Администратор', text: 'Первый, кто столкнулся с контактом "???".' },
         { id: 'masha', title: 'Маша', text: 'Второй контакт, пропавший после общения с "???".' },
-        { id: 'pavel', title: 'Павел', text: 'Третий контакт. Возможно, ещё жив.' },
-        { id: 'olga', title: 'Ольга', text: 'Исследователь QIP. Знает природу "???".' },
-        { id: 'unknown', title: '???', text: 'Не человек. Совокупность душ пользователей, не вышедших из QIP в 2013.' },
-        { id: 'img2013', title: 'IMG_2013.jpg', text: 'Файл, содержащий изображение "???". Не открывать.' },
-        { id: 'rules', title: 'Правила выживания', text: '1. Не открывать файлы. 2. Не отвечать на вопросы неправильно. 3. Не смотреть в глаза "???".' }
+        { id: 'pavel', title: 'Павел', text: 'Третий контакт.' },
+        { id: 'olga', title: 'Ольга', text: 'Исследователь QIP.' },
+        { id: 'unknown', title: '???', text: 'Не человек. Совокупность душ пользователей.' },
+        { id: 'img2013', title: 'IMG_2013.jpg', text: 'Проклятый файл.' },
+        { id: 'rules', title: 'Правила выживания', text: '1. Не открывать файлы. 2. Не отвечать неправильно.' }
     ];
 
     function renderEncyclopedia() {
@@ -1545,43 +1608,170 @@ P.P.S. В финале — не отвечай "да". Никогда.`;
             const unlocked = state.save.unlockedEntries.includes(entry.id);
             const div = document.createElement('div');
             div.className = 'entry' + (unlocked ? '' : ' locked');
-            div.innerHTML = `
-                <div class="entry-title">${unlocked ? entry.title : '🔒 ???'}</div>
-                <div>${unlocked ? entry.text : 'Не открыто. Продолжайте игру.'}</div>
-            `;
+            div.innerHTML = `<div class="entry-title">${unlocked ? entry.title : '🔒 ???'}</div><div>${unlocked ? entry.text : 'Не открыто.'}</div>`;
             D.encyclopediaBody.appendChild(div);
         });
     }
 
-    // ==================== CLOSE / UI EVENTS ====================
-    D.startBtn.addEventListener('click', e => { e.preventDefault(); startGame(false); });
-    D.startBtn.addEventListener('touchend', e => { e.preventDefault(); if (!state.gameStarted) startGame(false); }, { passive: false });
+    // ==================== COOP ====================
+    function generateCoopCode() {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let code = '';
+        for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+        return code;
+    }
 
-    D.continueBtn.addEventListener('click', e => { e.preventDefault(); startGame(true); });
-    D.continueBtn.addEventListener('touchend', e => { e.preventDefault(); if (!state.gameStarted) startGame(true); }, { passive: false });
+    function initCoop(code, asCreator) {
+        state.coopMode = true;
+        state.coopCode = code;
+        try {
+            state.coopChannel = new BroadcastChannel('qip2012_coop_' + code);
+            state.coopChannel.onmessage = e => {
+                const data = e.data;
+                if (data.type === 'message') {
+                    const div = document.createElement('div');
+                    div.className = `message ${data.msgType === 'me' ? 'coop-other' : 'them'}`;
+                    div.textContent = `[${data.sender}] ${data.text}`;
+                    D.messages.appendChild(div);
+                    D.messages.scrollTop = D.messages.scrollHeight;
+                } else if (data.type === 'hello') {
+                    const div = document.createElement('div');
+                    div.className = 'message system';
+                    div.textContent = `👥 Игрок ${data.sender} присоединился`;
+                    D.messages.appendChild(div);
+                    D.hudCoop.classList.remove('hidden');
+                    D.coopList.innerHTML = `<div class="coop-player">Ты</div><div class="coop-player">${data.sender}</div>`;
+                }
+            };
+            if (asCreator) {
+                state.coopChannel.postMessage({ type: 'hello', sender: 'Создатель' });
+            } else {
+                state.coopChannel.postMessage({ type: 'hello', sender: 'Игрок 2' });
+            }
+        } catch (e) {
+            showNotification('❌ Кооп-режим не поддерживается');
+        }
+    }
 
-    D.micBtn.addEventListener('click', async () => {
-        await requestMic();
+    D.coopBtn.addEventListener('click', () => {
+        const code = generateCoopCode();
+        D.coopCode.textContent = code;
+        D.coopModal.classList.remove('hidden');
     });
 
+    D.coopCopy.addEventListener('click', () => {
+        const code = D.coopCode.textContent;
+        navigator.clipboard.writeText(code).then(() => {
+            D.coopCopy.textContent = '✅ Скопировано!';
+            setTimeout(() => { D.coopCopy.textContent = '📋 Скопировать'; }, 2000);
+        }).catch(() => {
+            D.coopCopy.textContent = '⚠️ Не удалось';
+        });
+    });
+
+    D.coopJoin.addEventListener('click', () => {
+        const code = D.coopInput.value.trim().toUpperCase();
+        if (code.length < 4) {
+            showNotification('❌ Введи код');
+            return;
+        }
+        D.coopModal.classList.add('hidden');
+        startGame(false, code);
+    });
+
+    D.coopClose.addEventListener('click', () => D.coopModal.classList.add('hidden'));
+
+    // ==================== LEADERBOARD ====================
+    const LB_KEY = 'qip2012_leaderboard';
+    const DEFAULT_LB = [
+        { name: 'QIP_Master', time: 7200, correct: 12, total: 12, deaths: 0 },
+        { name: 'Anon', time: 5400, correct: 10, total: 12, deaths: 2 },
+        { name: 'Fearless', time: 3600, correct: 9, total: 12, deaths: 1 },
+        { name: 'Пользователь', time: 2400, correct: 7, total: 12, deaths: 3 },
+        { name: 'Новичок', time: 1200, correct: 4, total: 12, deaths: 5 }
+    ];
+
+    function loadLeaderboard() {
+        try {
+            const raw = localStorage.getItem(LB_KEY);
+            if (!raw) return [...DEFAULT_LB];
+            return JSON.parse(raw);
+        } catch (e) { return [...DEFAULT_LB]; }
+    }
+
+    function saveLeaderboard(list) {
+        try { localStorage.setItem(LB_KEY, JSON.stringify(list)); } catch (e) {}
+    }
+
+    function addToLeaderboard(name, time, correct, total, deaths) {
+        const list = loadLeaderboard();
+        list.push({ name, time, correct, total, deaths, you: true });
+        list.sort((a, b) => {
+            if (b.correct !== a.correct) return b.correct - a.correct;
+            return a.time - b.time;
+        });
+        const trimmed = list.slice(0, 20);
+        saveLeaderboard(trimmed);
+    }
+
+    function renderLeaderboard() {
+        const list = loadLeaderboard();
+        D.leaderboardBody.innerHTML = '';
+        const meName = state.save.playerName;
+        list.forEach((entry, i) => {
+            const div = document.createElement('div');
+            div.className = 'lb-entry' + (entry.you && entry.name === meName ? ' you' : '');
+            const rankCls = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+            div.innerHTML = `
+                <div class="rank ${rankCls}">#${i + 1}</div>
+                <div class="name">${entry.name}</div>
+                <div class="score">${entry.correct}/${entry.total} · ${formatTime(entry.time)} · 💀${entry.deaths}</div>
+            `;
+            D.leaderboardBody.appendChild(div);
+        });
+    }
+
+    D.leaderboardBtn.addEventListener('click', () => {
+        renderLeaderboard();
+        openApp('leaderboard-window');
+    });
+
+    D.leaderboardAfterBtn.addEventListener('click', () => {
+        renderLeaderboard();
+        D.ending.classList.add('hidden');
+        openApp('leaderboard-window');
+    });
+
+    D.saveScoreBtn.addEventListener('click', () => {
+        const name = D.playerName.value.trim() || 'Аноним';
+        state.save.playerName = name;
+        state.save.saveScoreName = name;
+        saveGame();
+        addToLeaderboard(name, state.gameTime, state.correctAnswers, state.totalQuestions, state.save.deaths);
+        showNotification('🏆 Результат сохранён!');
+        D.saveScoreBtn.disabled = true;
+        D.saveScoreBtn.textContent = '✅ СОХРАНЕНО';
+    });
+
+    // ==================== RESTART ====================
     D.restartBtn.addEventListener('click', () => {
         clearSave();
         location.reload();
     });
 
-    // Escape — экстренный выход (хорошая концовка, только в акте 1-2)
+    // ==================== ESCAPE ====================
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape' && state.gameStarted && !state.paused) {
             if (state.act <= 2 && state.totalQuestions === 0) {
                 state.paused = true;
                 state.save.survived++;
                 saveGame();
+                D.ending.classList.remove('hidden');
+                D.endingNameInput.style.display = 'flex';
                 D.endingTitle.textContent = 'ТЫ УШЁЛ ВОВРЕМЯ';
                 D.endingTitle.style.color = '#0c4';
                 D.endingText.textContent = 'Ты закрыл QIP до того, как он достал тебя.';
                 D.endingStats.innerHTML = `🟢 Спасений: ${state.save.survived}<br>⏱ Время: ${formatTime(state.gameTime)}`;
-                D.ending.classList.remove('hidden');
-                D.ending.querySelector('h1').style.color = '#0c4';
             } else {
                 showNotification('❌ Выйти невозможно.');
                 triggerGlitch();
@@ -1591,23 +1781,28 @@ P.P.S. В финале — не отвечай "да". Никогда.`;
         }
     });
 
-    // Автосохранение при закрытии
+    // ==================== AUTOSAVE ====================
     window.addEventListener('beforeunload', () => {
         if (state.gameStarted && !state.paused) saveGame();
+    });
+
+    // ==================== MIC BTN ====================
+    D.micBtn.addEventListener('click', async () => {
+        await requestMic();
     });
 
     // ==================== INIT ====================
     function init() {
         renderContacts();
         renderGallery();
-        D.notesText.value = NOTES_CONTENT;
         renderEncyclopedia();
+        D.notesText.value = NOTES_CONTENT;
+        updateIconsVisibility();
         runBoot();
     }
 
     init();
 
-    // Инициализация AudioContext при первом клике
     document.addEventListener('click', () => {
         initAudio();
         resumeAudio();
