@@ -2,195 +2,160 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#000000">
-    <title>Не нажимай</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>QIP 2012</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <!-- ЭКРАН 0: ВОЗВРАЩЕНИЕ -->
-    <div id="screen-returning" class="screen">
-        <h1 class="glitch" data-text="Ты вернулся">Ты вернулся</h1>
-        <p class="subtitle">Я знал, что ты придёшь.</p>
-        <p id="return-info" class="stats"></p>
-        <button id="btn-return-start" class="creepy-btn">Продолжить</button>
+<!-- ===== BOOT SCREEN (Windows XP) ===== -->
+<div id="boot-screen" class="boot-screen">
+    <div class="boot-logo">
+        <div class="win-logo">⊞</div>
+        <div class="win-text">Microsoft<sup>®</sup> Windows<sup>®</sup> XP</div>
+        <div class="win-sub">Professional</div>
+    </div>
+    <div class="boot-bar">
+        <div class="boot-bar-fill"></div>
+    </div>
+    <div class="boot-copyright">Copyright © Microsoft Corporation</div>
+</div>
+
+<!-- ===== INTRO ===== -->
+<div id="intro" class="intro hidden">
+    <div class="intro-content">
+        <h1 class="glitch-title" data-text="QIP 2012">QIP 2012</h1>
+        <p class="intro-sub">Ты помнишь этот мессенджер?</p>
+        <p class="intro-warn">Иногда лучше не заходить в сеть...</p>
+        <button id="start-btn" type="button">ВОЙТИ В СЕТЬ</button>
+        <div class="intro-tip">🔊 Играй в наушниках. Осторожно: резкие звуки.</div>
+    </div>
+</div>
+
+<!-- ===== DESKTOP ===== -->
+<div id="desktop" class="hidden">
+    <div id="wallpaper"></div>
+
+    <!-- Иконки рабочего стола -->
+    <div class="desktop-icons">
+        <div class="desktop-icon" id="icon-qip">
+            <div class="icon-img">💬</div>
+            <div class="icon-label">QIP 2012</div>
+        </div>
+        <div class="desktop-icon" id="icon-mine">
+            <div class="icon-img">💣</div>
+            <div class="icon-label">Сапёр</div>
+        </div>
+        <div class="desktop-icon" id="icon-recycle">
+            <div class="icon-img">🗑️</div>
+            <div class="icon-label">Корзина</div>
+        </div>
     </div>
 
-    <!-- ЭКРАН 1: ПРИВЕТСТВИЕ -->
-    <div id="screen-intro" class="screen active">
-        <h1 class="glitch" data-text="Не нажимай">Не нажимай</h1>
-        <p class="subtitle">Некоторые вещи лучше не открывать.</p>
-        <button id="btn-start" class="creepy-btn">Я готов</button>
-        <p class="hint">🔊 Включи звук. Разреши камеру. Не оглядывайся.</p>
-    </div>
-
-    <!-- ЭКРАН 2: РАЗРЕШЕНИЕ -->
-    <div id="screen-permission" class="screen">
-        <h2>Разреши доступ к камере</h2>
-        <p>Мы просто хотим <span class="red">посмотреть на тебя</span>.</p>
-        <div class="video-wrapper">
-            <video id="webcam" autoplay playsinline muted></video>
-            <div class="scanline"></div>
-        </div>
-        <div class="btn-row">
-            <button id="btn-allow" class="creepy-btn">Разрешить</button>
-            <button id="btn-deny" class="creepy-btn ghost">Отказать</button>
-        </div>
-    </div>
-
-    <!-- ЭКРАН 3: ИГРА -->
-    <div id="screen-game" class="screen">
-        <div class="video-wrapper fullscreen-video">
-            <video id="webcam-bg" autoplay playsinline muted></video>
-            <canvas id="gl-canvas"></canvas>
-            <div class="overlay-dark"></div>
-            <div class="scanline"></div>
-            <div class="noise"></div>
-        </div>
-
-        <canvas id="face-canvas"></canvas>
-
-        <div id="hud" class="hud">
-            <div class="hud-item"><span class="hud-label">ОБЪЕКТ</span><span id="hud-object" class="hud-value">—</span></div>
-            <div class="hud-item"><span class="hud-label">ЭМОЦИЯ</span><span id="hud-emotion" class="hud-value">—</span></div>
-            <div class="hud-item"><span class="hud-label">СИГНАЛ</span><span id="hud-signal" class="hud-value">●●●●●</span></div>
-            <div class="hud-item"><span class="hud-label">УГРОЗА</span><span id="hud-threat" class="hud-value">0%</span></div>
-            <div class="hud-item"><span class="hud-label">СЛЕДЯТ</span><span id="hud-watchers" class="hud-value">0</span></div>
-        </div>
-
-        <div id="hud-bottom" class="hud-bottom">
-            <span id="hud-ip">IP: локально</span>
-            <span id="hud-time">00:00</span>
-            <span id="hud-browser">Browser: —</span>
-        </div>
-
-        <div id="message-container">
-            <p id="message" class="message-text"></p>
-            <p id="status" class="status-text"></p>
-        </div>
-
-        <div id="timer-bar"><div id="timer-fill"></div></div>
-        <div id="fact-popup" class="fact-popup"></div>
-    </div>
-
-    <!-- ЭКРАН 4: СЦЕНА — 4 ЛЮДЕЙ + ПРИЗРАК -->
-    <div id="screen-chat" class="screen">
-        <div class="videochat-container">
-
-            <div class="videochat-header">
-                <span class="live-dot"></span>
-                <span id="vc-name">████████</span>
-                <span id="vc-status" class="vc-status">соединение...</span>
-                <span id="vc-timer" class="vc-timer">00:00</span>
+    <!-- Окно QIP -->
+    <div id="qip-window" class="hidden-window">
+        <div class="window-header" id="qip-header">
+            <span>💬 QIP 2012 - [В сети]</span>
+            <div class="window-controls">
+                <span class="min">—</span>
+                <span class="max">□</span>
+                <span class="close" id="qip-close">✕</span>
             </div>
-
-            <div class="videochat-main">
-
-                <!-- СЕТКА 2x2 — 4 "участника" -->
-                <div class="grid-4">
-                    <div class="grid-cell" data-cell="0">
-                        <canvas class="ghost-canvas"></canvas>
-                        <div class="cell-label">░░░░░</div>
-                    </div>
-                    <div class="grid-cell" data-cell="1">
-                        <canvas class="ghost-canvas"></canvas>
-                        <div class="cell-label">░░░░░</div>
-                    </div>
-                    <div class="grid-cell" data-cell="2">
-                        <canvas class="ghost-canvas"></canvas>
-                        <div class="cell-label">░░░░░</div>
-                    </div>
-                    <div class="grid-cell" data-cell="3">
-                        <canvas class="ghost-canvas"></canvas>
-                        <div class="cell-label">░░░░░</div>
+        </div>
+        <div class="qip-body">
+            <div class="contacts" id="contacts">
+                <div class="contact active" data-user="admin">
+                    <div class="avatar">👤</div>
+                    <div class="info">
+                        <div class="name">Администратор</div>
+                        <div class="status">в сети</div>
                     </div>
                 </div>
-
-                <!-- Твоя камера в углу + призрак за спиной -->
-                <div class="self-view-corner">
-                    <video id="ghost-behind" autoplay playsinline muted></video>
-                    <video id="webcam-self" autoplay playsinline muted></video>
-                    <div class="self-label-corner">ТЫ</div>
-                    <div class="self-rec-corner">● REC</div>
+                <div class="contact" data-user="masha">
+                    <div class="avatar">💁</div>
+                    <div class="info">
+                        <div class="name">Маша</div>
+                        <div class="status">в сети</div>
+                    </div>
                 </div>
-
-                <!-- Помехи -->
-                <div class="vc-static"></div>
-                <div class="vc-scanlines"></div>
-
-                <!-- Индикатор "печатают" -->
-                <div id="vc-thinking" class="vc-thinking">
-                    <span>.</span><span>.</span><span>.</span>
-                </div>
-
-                <!-- Субтитры -->
-                <div id="vc-subtitle" class="vc-subtitle"></div>
-            </div>
-
-            <div class="videochat-bottom">
-                <div class="vc-controls">
-                    <button id="vc-mute" class="vc-btn vc-btn-active" title="Микрофон">🎤</button>
-                    <button id="vc-cam" class="vc-btn vc-btn-active" title="Камера">📷</button>
-                    <button id="vc-hangup" class="vc-btn vc-btn-danger" title="Положить трубку">📞</button>
+                <div class="contact" data-user="unknown">
+                    <div class="avatar">❓</div>
+                    <div class="info">
+                        <div class="name">???</div>
+                        <div class="status offline">не в сети</div>
+                    </div>
                 </div>
             </div>
-
-            <div class="vc-input-panel">
-                <div id="vc-mic-bar" class="vc-mic-bar">
-                    <div class="vc-mic-icon">🎤</div>
-                    <div class="vc-mic-level">
-                        <div id="vc-mic-level-fill" class="vc-mic-level-fill"></div>
-                    </div>
-                    <div id="vc-mic-status" class="vc-mic-status">Микрофон: проверка...</div>
-                </div>
-
-                <div class="vc-text-row">
-                    <input type="text" id="vc-input" class="vc-input" placeholder="Скажи что-нибудь..." autocomplete="off">
-                    <button id="vc-send-btn" class="vc-send-btn">→</button>
-                </div>
-
-                <div id="vc-mode-hint" class="vc-mode-hint">
-                    🎤 Говори — они слышат (но не отвечают).
+            <div class="chat">
+                <div class="chat-header" id="chat-header">Чат с Администратор</div>
+                <div class="messages" id="messages"></div>
+                <div class="input-area">
+                    <input type="text" id="message-input" placeholder="Введите сообщение..." maxlength="200" autocomplete="off">
+                    <button id="send-btn" type="button">➤</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- ЭКРАН 5: ФИНАЛ -->
-    <div id="screen-end" class="screen">
-        <h1 id="end-title" class="glitch" data-text="Я тебя запомнил">Я тебя запомнил</h1>
-        <p id="end-subtitle" class="subtitle">До следующего раза...</p>
-        <div id="end-video-wrap" class="end-video-wrap">
-            <video id="end-video" playsinline controls></video>
+    <!-- Taskbar -->
+    <div id="taskbar">
+        <div class="start-btn" id="start-btn-desktop">
+            <span class="start-logo">⊞</span> Пуск
         </div>
-        <div id="end-stats" class="stats"></div>
-        <button id="btn-restart" class="creepy-btn">Начать заново</button>
-        <button id="btn-forget" class="creepy-btn ghost">Стереть мою память</button>
+        <div class="taskbar-items">
+            <div class="taskbar-item" id="taskbar-qip">💬 QIP 2012</div>
+        </div>
+        <div class="tray">
+            <span id="tray-icon">🔊</span>
+            <span class="clock" id="clock">22:13</span>
+        </div>
     </div>
+</div>
 
-    <!-- ЗАГРУЗЧИК -->
-    <div id="loader" class="loader">
-        <p id="loader-text">Загрузка моделей...</p>
-        <div class="loader-bar"><div id="loader-fill"></div></div>
+<!-- ===== GLITCH / VISUAL FX ===== -->
+<div id="glitch-overlay"></div>
+<div id="vignette"></div>
+<div id="flash"></div>
+
+<!-- ===== JUMPSCARE ===== -->
+<div id="jumpscare" class="hidden">
+    <div class="scary-face">😱</div>
+</div>
+
+<!-- ===== FADE ===== -->
+<div id="fade-overlay"></div>
+
+<!-- ===== ENDING SCREEN ===== -->
+<div id="ending" class="ending hidden">
+    <div class="ending-content">
+        <h1 id="ending-title">ТЫ НЕ ДОЛЖЕН БЫЛ ЗАХОДИТЬ</h1>
+        <p id="ending-text">QIP 2012 больше не работает.</p>
+        <button id="restart-btn" type="button">ПОПРОБОВАТЬ СНОВА</button>
     </div>
+</div>
 
-    <!-- ПРЕДУПРЕЖДЕНИЕ О СМЕНЕ ВКЛАДКИ -->
-    <div id="tab-warning" class="tab-warning">
-        <p>Я видел, как ты ушёл.</p>
-        <p class="small">Не делай так больше.</p>
+<!-- ===== GOOD ENDING ===== -->
+<div id="good-ending" class="ending hidden">
+    <div class="ending-content good">
+        <h1 id="good-title">ТЫ ВЫЖИЛ</h1>
+        <p id="good-text">Ты закрыл QIP вовремя...</p>
+        <p id="good-text2">Но он всё ещё где-то там.</p>
+        <button id="restart-btn-2" type="button">ВЕРНУТЬСЯ</button>
     </div>
+</div>
 
-    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
-    <script src="js/audio.js"></script>
-    <script src="js/memory.js"></script>
-    <script src="js/fingerprint.js"></script>
-    <script src="js/endings.js"></script>
-    <script src="js/speech.js"></script>
-    <script src="js/recorder.js"></script>
-    <script src="js/shaders.js"></script>
-    <script src="js/face.js"></script>
-    <script src="js/chat.js"></script>
-    <script src="js/script.js"></script>
+<!-- ===== CHOICE DIALOG ===== -->
+<div id="choice" class="choice hidden">
+    <div class="choice-box">
+        <div class="choice-title">⚠️ ВНИМАНИЕ</div>
+        <div class="choice-text">Открыть чат с контактом <b>???</b>?</div>
+        <div class="choice-buttons">
+            <button id="choice-yes" type="button">ДА</button>
+            <button id="choice-no" type="button">НЕТ</button>
+        </div>
+    </div>
+</div>
+
+<script src="script.js"></script>
 </body>
 </html>
