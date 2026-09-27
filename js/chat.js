@@ -1,5 +1,7 @@
 /* ============================================================
    VIDEOCALL — видеочат с фейковыми "людьми"
+   ИСПРАВЛЕНО: зависание "печатает", таймер после финала,
+   сброс глитча, гонки setTimeout
    ============================================================ */
 
 const CHARACTERS = [
@@ -103,9 +105,20 @@ class VideoChat {
         this.chatEndings = {};
         this.callTimer = null;
         this.callSeconds = 0;
+
+        // 🆕 ВСЕ таймеры — чтобы точно их очищать
         this.subtitleTimeout = null;
         this.silenceTimeout = null;
+        this.introTimeout = null;
+        this.replyTimeout = null;
+        this.screamTimeout = null;
         this.glRafId = null;
+        this.forceTimeout = null;
+
+        // 🆕 Флаг «сейчас печатает» — чтобы не запускать параллельно
+        this.isThinking = false;
+        // 🆕 ID текущей сессии — защита от гонок при рестарте
+        this.sessionId = 0;
 
         this.bindEvents();
     }
@@ -140,7 +153,30 @@ class VideoChat {
         this.micText.addEventListener('click', () => this.input.focus());
     }
 
+    /* 🆕 Полная очистка ВСЕХ таймеров и флагов */
+    clearAllTimers() {
+        clearInterval(this.callTimer);
+        clearTimeout(this.subtitleTimeout);
+        clearTimeout(this.silenceTimeout);
+        clearTimeout(this.introTimeout);
+        clearTimeout(this.replyTimeout);
+        clearTimeout(this.screamTimeout);
+        clearTimeout(this.forceTimeout);
+        this.callTimer = null;
+        this.subtitleTimeout = null;
+        this.silenceTimeout = null;
+        this.introTimeout = null;
+        this.replyTimeout = null;
+        this.screamTimeout = null;
+        this.forceTimeout = null;
+    }
+
     start(webcamStream) {
+        // 🆕 Новая сессия — все старые таймеры убиваем
+        this.sessionId++;
+        this.clearAllTimers();
+        this.isThinking = false;
+
         this.activeCharacter = this.selectCharacter();
         this.playerMessagesSent = 0;
         this.completed = false;
@@ -152,6 +188,13 @@ class VideoChat {
         this.statusEl.style.color = '#666';
         this.nameOverlay.textContent = this.activeCharacter.name;
 
+        // 🆕 Сброс UI от прошлой игры
+        this.hideThinking();
+        this.subtitle.classList.remove('show', 'scream');
+        this.subtitle.textContent = '';
+        this.input.value = '';
+        this.timerEl.textContent = '00:00';
+
         if (webcamStream) {
             this.themVideo.srcObject = webcamStream;
             this.selfVideo.srcObject = webcamStream;
@@ -159,15 +202,18 @@ class VideoChat {
 
         this.initGlitchCanvas();
 
-        clearInterval(this.callTimer);
+        // 🆕 Таймер звонка — с проверкой флага завершения
         this.callTimer = setInterval(() => {
+            if (this.completed) return;   // не тикает после финала
             this.callSeconds++;
             const m = String(Math.floor(this.callSeconds / 60)).padStart(2, '0');
             const s = String(this.callSeconds % 60).padStart(2, '0');
             this.timerEl.textContent = `${m}:${s}`;
         }, 1000);
 
-        setTimeout(() => {
+        const sid = this.sessionId;
+        this.introTimeout = setTimeout(() => {
+            if (this.sessionId !== sid || this.completed) return;
             this.statusEl.textContent = this.activeCharacter.status;
             this.statusEl.style.color = '#00ff44';
             this.characterIntro();
@@ -186,46 +232,70 @@ class VideoChat {
 
     characterIntro() {
         const intro = this.activeCharacter.intro;
+        const sid = this.sessionId;
         let i = 0;
+
         const next = () => {
-            if (i >= intro.length || this.completed) return;
+            if (this.sessionId !== sid || this.completed) return;
+            if (i >= intro.length) {
+                this.startSilenceTimer();
+                return;
+            }
+
             this.showThinking();
-            setTimeout(() => {
+            const delay = 1500 + Math.random() * 800;
+
+            this.introTimeout = setTimeout(() => {
+                if (this.sessionId !== sid || this.completed) return;
                 this.hideThinking();
                 this.playSubtitle(intro[i], 3000);
                 horrorAudio.playVoiceBubble();
                 i++;
                 if (i < intro.length) {
-                    setTimeout(next, 3200);
+                    // 🆕 было 3200 — слишком долго. Снижаем до 2400
+                    this.introTimeout = setTimeout(next, 2400);
                 } else {
                     this.startSilenceTimer();
                 }
-            }, 1500 + Math.random() * 800);
+            }, delay);
         };
         next();
     }
 
     startSilenceTimer() {
         clearTimeout(this.silenceTimeout);
+        if (this.completed) return;
+        const sid = this.sessionId;
+
+        // 🆕 было 12 сек → 8 сек, и ждём не 8, а 5
         this.silenceTimeout = setTimeout(() => {
-            if (this.playerMessagesSent === 0 && !this.completed) {
+            if (this.sessionId !== sid || this.completed) return;
+            if (this.playerMessagesSent === 0) {
                 this.playSubtitle('Ты молчишь. Я не люблю тишину.', 3000);
                 horrorAudio.playVoiceBubble();
-                setTimeout(() => {
-                    if (this.playerMessagesSent === 0 && !this.completed) {
+
+                this.silenceTimeout = setTimeout(() => {
+                    if (this.sessionId !== sid || this.completed) return;
+                    if (this.playerMessagesSent === 0) {
                         this.triggerScream('silent');
                     }
-                }, 8000);
+                }, 5000);
             }
-        }, 12000);
+        }, 8000);
     }
 
     handlePlayerMessage() {
         const text = this.input.value.trim();
         if (!text || this.completed) return;
+
+        // 🆕 Отвечая, сбрасываем тишину и прячем «...»
+        clearTimeout(this.silenceTimeout);
+        clearTimeout(this.replyTimeout);
+        this.hideThinking();
+        this.isThinking = false;
+
         this.input.value = '';
         this.playerMessagesSent++;
-        clearTimeout(this.silenceTimeout);
         memory.addPlayerMessage(text);
 
         const nameMatch = text.match(/(?:меня зовут|я\s+—\s+|я\s+)([А-ЯЁA-Z][а-яёa-z]+)/i);
@@ -234,13 +304,17 @@ class VideoChat {
         const screamTriggers = ['убей', 'смерть', 'die', 'kill', 'ненавижу', 'заткнись', 'fuck'];
         if (screamTriggers.some(w => text.toLowerCase().includes(w))) {
             this.playSubtitle('...', 500);
-            setTimeout(() => this.triggerScream('betrayed'), 800);
+            const sid = this.sessionId;
+            this.screamTimeout = setTimeout(() => {
+                if (this.sessionId === sid && !this.completed) this.triggerScream('betrayed');
+            }, 800);
             return;
         }
 
         if (/трубк|пока|прощай|bye/i.test(text)) {
             this.playSubtitle('Ты не можешь уйти. Я уже здесь.', 3000);
             horrorAudio.playVoiceBubble();
+            this.startSilenceTimer();
             return;
         }
 
@@ -261,18 +335,28 @@ class VideoChat {
             }
         }
 
+        // Каждое 4-е сообщение → скример
         if (this.playerMessagesSent % 4 === 0) {
-            setTimeout(() => this.triggerScream('escalate'), 1500);
+            const sid = this.sessionId;
+            this.screamTimeout = setTimeout(() => {
+                if (this.sessionId === sid && !this.completed) this.triggerScream('escalate');
+            }, 1500);
             return;
         }
 
+        // 🆕 Обычный ответ — короткая задержка, без зависания
         this.showThinking();
-        setTimeout(() => {
+        this.isThinking = true;
+        const sid = this.sessionId;
+
+        this.replyTimeout = setTimeout(() => {
+            if (this.sessionId !== sid || this.completed) return;
             this.hideThinking();
+            this.isThinking = false;
             this.playSubtitle(reply, 3500);
             horrorAudio.playVoiceBubble();
             this.startSilenceTimer();
-        }, 1200 + Math.random() * 1500);
+        }, 1000 + Math.random() * 900);   // 🆕 было 1200-2700 → стало 1000-1900
     }
 
     playSubtitle(text, duration = 3000, scream = false) {
@@ -283,26 +367,49 @@ class VideoChat {
         if (scream) {
             this.subtitle.textContent = text;
         } else {
+            // 🆕 Печатающийся текст с защитой от перезапуска
             this.subtitle.textContent = '';
             let i = 0;
-            const interval = setInterval(() => {
+            const total = text.length;
+            const speed = 40;
+            const tick = () => {
+                if (this.completed && !scream) return;
                 this.subtitle.textContent += text[i] || '';
                 i++;
-                if (i >= text.length) clearInterval(interval);
-            }, 45);
+                if (i < total) {
+                    this.subtitleTimeout = setTimeout(tick, speed);
+                }
+            };
+            tick();
         }
 
-        this.subtitleTimeout = setTimeout(() => {
+        // 🆕 Показ — отдельный таймер (не тот же, что печатание)
+        const hideDelay = scream ? duration : Math.max(duration, text.length * 40 + 800);
+        const sid = this.sessionId;
+        setTimeout(() => {
+            if (this.sessionId !== sid) return;
             this.subtitle.classList.remove('show', 'scream');
-        }, duration);
+        }, hideDelay);
     }
 
-    showThinking() { this.thinking.classList.add('active'); }
-    hideThinking() { this.thinking.classList.remove('active'); }
+    /* 🆕 Гарантированное скрытие "печатает" */
+    showThinking() {
+        this.isThinking = true;
+        this.thinking.classList.add('active');
+    }
+
+    hideThinking() {
+        this.isThinking = false;
+        this.thinking.classList.remove('active');
+    }
 
     triggerScream(type) {
         if (this.completed) return;
         this.completed = true;
+
+        // 🆕 Убиваем ВСЕ таймеры — ничего не должно тикать после скримера
+        this.clearAllTimers();
+        this.hideThinking();
 
         const char = this.activeCharacter;
         const scare = char.scare[Math.floor(Math.random() * char.scare.length)];
@@ -310,12 +417,9 @@ class VideoChat {
         this.chatEndings = { [char.endingId]: true };
         if (type === 'betrayed') this.chatEndings.betrayed = true;
         if (type === 'silent') this.chatEndings.silent = true;
-        if (type === 'saved') this.chatEndings.saved = true;
         if (this.playerMessagesSent >= 15) this.chatEndings.obsessed = true;
 
-        this.hideThinking();
         this.playSubtitle(scare, 2500, true);
-
         horrorAudio.playFullScream();
 
         document.body.classList.add('glitching');
@@ -341,10 +445,11 @@ class VideoChat {
             count++;
         }, 45);
 
-        setTimeout(() => {
+        const sid = this.sessionId;
+        this.forceTimeout = setTimeout(() => {
+            if (this.sessionId !== sid) return;
             document.body.classList.remove('glitching');
             memory.completeChat(char.id);
-            clearInterval(this.callTimer);
             this.onComplete?.();
         }, 3000);
     }
@@ -354,6 +459,7 @@ class VideoChat {
         const gl = canvas.getContext('webgl');
         if (!gl) return;
 
+        // 🆕 Пересоздаём размер — вдруг поворот экрана
         canvas.width = canvas.clientWidth || 800;
         canvas.height = canvas.clientHeight || 600;
 
@@ -411,7 +517,11 @@ class VideoChat {
         const uIntensity = gl.getUniformLocation(program, 'uIntensity');
 
         this.gl = gl;
+        // 🆕 Сброс интенсивности на старте
         this.glIntensity = 0.5;
+
+        // 🆕 Останавливаем старый RAF если был
+        if (this.glRafId) cancelAnimationFrame(this.glRafId);
 
         const startTime = performance.now();
         const loop = () => {
@@ -433,12 +543,12 @@ class VideoChat {
     }
 
     stop() {
-        clearInterval(this.callTimer);
-        clearTimeout(this.subtitleTimeout);
-        clearTimeout(this.silenceTimeout);
+        this.sessionId++;   // 🆕 инвалидируем все отложенные колбэки
+        this.clearAllTimers();
+        this.hideThinking();
         if (this.glRafId) cancelAnimationFrame(this.glRafId);
-        this.gl = null;
         this.glRafId = null;
+        this.gl = null;
     }
 
     getState() {
