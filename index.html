@@ -2,20 +2,30 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#000000">
     <title>Не нажимай</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- Экран 1: Приветствие -->
+
+    <!-- ЭКРАН 0: ВОЗВРАЩЕНИЕ -->
+    <div id="screen-returning" class="screen">
+        <h1 class="glitch" data-text="Ты вернулся">Ты вернулся</h1>
+        <p class="subtitle">Я знал, что ты придёшь.</p>
+        <p id="return-info" class="stats"></p>
+        <button id="btn-return-start" class="creepy-btn">Продолжить</button>
+    </div>
+
+    <!-- ЭКРАН 1: ПРИВЕТСТВИЕ -->
     <div id="screen-intro" class="screen active">
-        <h1 class="glitch" data-text="Ты уверен?">Ты уверен?</h1>
+        <h1 class="glitch" data-text="Не нажимай">Не нажимай</h1>
         <p class="subtitle">Некоторые вещи лучше не открывать.</p>
         <button id="btn-start" class="creepy-btn">Я готов</button>
         <p class="hint">🔊 Включи звук. Разреши камеру. Не оглядывайся.</p>
     </div>
 
-    <!-- Экран 2: Разрешение камеры -->
+    <!-- ЭКРАН 2: РАЗРЕШЕНИЕ -->
     <div id="screen-permission" class="screen">
         <h2>Разреши доступ к камере</h2>
         <p>Мы просто хотим <span class="red">посмотреть на тебя</span>.</p>
@@ -29,44 +39,124 @@
         </div>
     </div>
 
-    <!-- Экран 3: Основной хоррор -->
+    <!-- ЭКРАН 3: ИГРА -->
     <div id="screen-game" class="screen">
         <div class="video-wrapper fullscreen-video">
             <video id="webcam-bg" autoplay playsinline muted></video>
+            <canvas id="gl-canvas"></canvas>
             <div class="overlay-dark"></div>
             <div class="scanline"></div>
             <div class="noise"></div>
         </div>
 
-        <!-- Оверлей с распознаванием лиц -->
         <canvas id="face-canvas"></canvas>
+
+        <div id="hud" class="hud">
+            <div class="hud-item"><span class="hud-label">ОБЪЕКТ</span><span id="hud-object" class="hud-value">—</span></div>
+            <div class="hud-item"><span class="hud-label">ЭМОЦИЯ</span><span id="hud-emotion" class="hud-value">—</span></div>
+            <div class="hud-item"><span class="hud-label">СИГНАЛ</span><span id="hud-signal" class="hud-value">●●●●●</span></div>
+            <div class="hud-item"><span class="hud-label">УГРОЗА</span><span id="hud-threat" class="hud-value">0%</span></div>
+            <div class="hud-item"><span class="hud-label">СЛЕДЯТ</span><span id="hud-watchers" class="hud-value">0</span></div>
+        </div>
+
+        <div id="hud-bottom" class="hud-bottom">
+            <span id="hud-ip">IP: локально</span>
+            <span id="hud-time">00:00</span>
+            <span id="hud-browser">Browser: —</span>
+        </div>
 
         <div id="message-container">
             <p id="message" class="message-text"></p>
             <p id="status" class="status-text"></p>
         </div>
 
-        <!-- Прогресс-бар "времени до конца" -->
         <div id="timer-bar"><div id="timer-fill"></div></div>
+        <div id="fact-popup" class="fact-popup"></div>
     </div>
 
-    <!-- Экран 4: Финал -->
+    <!-- ЭКРАН 4: ВИДЕОЧАТ -->
+    <div id="screen-chat" class="screen">
+        <div class="videochat-container">
+
+            <div class="videochat-header">
+                <span class="live-dot"></span>
+                <span id="vc-name">—</span>
+                <span id="vc-status" class="vc-status">соединение...</span>
+                <span id="vc-timer" class="vc-timer">00:00</span>
+            </div>
+
+            <div class="videochat-main">
+                <video id="webcam-them" autoplay playsinline muted></video>
+                <canvas id="vc-glitch-canvas"></canvas>
+                <div class="vc-static"></div>
+                <div class="vc-scanlines"></div>
+
+                <div id="vc-thinking" class="vc-thinking">
+                    <span>.</span><span>.</span><span>.</span>
+                </div>
+
+                <div id="vc-subtitle" class="vc-subtitle"></div>
+
+                <div class="vc-label">
+                    <span id="vc-name-overlay">░░░░░</span>
+                </div>
+            </div>
+
+            <div class="videochat-bottom">
+                <div class="vc-self">
+                    <video id="webcam-self" autoplay playsinline muted></video>
+                    <div class="vc-self-label">ТЫ</div>
+                    <div class="vc-self-rec">● REC</div>
+                </div>
+
+                <div class="vc-controls">
+                    <button id="vc-mute" class="vc-btn vc-btn-active" title="Микрофон">🎤</button>
+                    <button id="vc-cam" class="vc-btn vc-btn-active" title="Камера">📷</button>
+                    <button id="vc-hangup" class="vc-btn vc-btn-danger" title="Положить трубку">📞</button>
+                </div>
+            </div>
+
+            <div class="vc-mic-hint">
+                <span id="vc-mic-text">Нажми и говори...</span>
+                <input type="text" id="vc-input" class="vc-input" placeholder="Скажи что-нибудь..." autocomplete="off">
+            </div>
+        </div>
+    </div>
+
+    <!-- ЭКРАН 5: ФИНАЛ -->
     <div id="screen-end" class="screen">
-        <h1 class="glitch" data-text="Я тебя запомнил">Я тебя запомнил</h1>
-        <p class="subtitle">До следующего раза...</p>
-        <p id="end-stats" class="stats"></p>
+        <h1 id="end-title" class="glitch" data-text="Я тебя запомнил">Я тебя запомнил</h1>
+        <p id="end-subtitle" class="subtitle">До следующего раза...</p>
+        <div id="end-video-wrap" class="end-video-wrap">
+            <video id="end-video" playsinline controls></video>
+        </div>
+        <div id="end-stats" class="stats"></div>
         <button id="btn-restart" class="creepy-btn">Начать заново</button>
+        <button id="btn-forget" class="creepy-btn ghost">Стереть мою память</button>
     </div>
 
-    <!-- Загрузка моделей -->
+    <!-- ЗАГРУЗЧИК -->
     <div id="loader" class="loader">
-        <p>Загрузка моделей распознавания...</p>
+        <p id="loader-text">Загрузка моделей...</p>
         <div class="loader-bar"><div id="loader-fill"></div></div>
     </div>
 
+    <!-- ПРЕДУПРЕЖДЕНИЕ О СМЕНЕ ВКЛАДКИ -->
+    <div id="tab-warning" class="tab-warning">
+        <p>Я видел, как ты ушёл.</p>
+        <p class="small">Не делай так больше.</p>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
-    <script src="audio.js"></script>
-    <script src="face.js"></script>
-    <script src="script.js"></script>
+    <script src="js/audio.js"></script>
+    <script src="js/memory.js"></script>
+    <script src="js/fingerprint.js"></script>
+    <script src="js/endings.js"></script>
+    <script src="js/speech.js"></script>
+    <script src="js/recorder.js"></script>
+    <script src="js/shaders.js"></script>
+    <script src="js/face.js"></script>
+    <script src="js/chat.js"></script>
+    <script src="js/script.js"></script>
 </body>
 </html>

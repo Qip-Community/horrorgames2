@@ -9,6 +9,7 @@ html, body {
     width: 100vw;
     cursor: crosshair;
     user-select: none;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .screen {
@@ -24,7 +25,7 @@ html, body {
 }
 .screen.active { display: flex; }
 
-/* ===== Глитч-заголовок ===== */
+/* Глитч-заголовок */
 .glitch {
     font-size: clamp(2rem, 8vw, 5rem);
     font-weight: bold;
@@ -36,8 +37,7 @@ html, body {
 .glitch::before, .glitch::after {
     content: attr(data-text);
     position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
+    top: 0; left: 0; width: 100%; height: 100%;
 }
 .glitch::before {
     color: #ff0000;
@@ -62,32 +62,18 @@ html, body {
     100% { transform: translate(3px, -2px); }
 }
 
-.subtitle {
-    margin-top: 20px;
-    font-size: 1.2rem;
-    color: #888;
-    letter-spacing: 2px;
-}
-.hint {
-    margin-top: 30px;
-    font-size: 0.85rem;
-    color: #555;
-    letter-spacing: 1px;
-}
-.red {
-    color: #ff2222;
-    text-shadow: 0 0 10px #ff0000;
-}
+.subtitle { margin-top: 20px; font-size: 1.2rem; color: #888; letter-spacing: 2px; }
+.hint { margin-top: 30px; font-size: 0.85rem; color: #555; letter-spacing: 1px; }
+.red { color: #ff2222; text-shadow: 0 0 10px #ff0000; }
 
-/* ===== Кнопки ===== */
 .creepy-btn {
-    margin-top: 40px;
+    margin-top: 25px;
     padding: 15px 40px;
     background: transparent;
     border: 2px solid #ff2222;
     color: #ff2222;
     font-family: inherit;
-    font-size: 1.2rem;
+    font-size: 1.1rem;
     letter-spacing: 3px;
     cursor: pointer;
     transition: all 0.3s;
@@ -98,90 +84,62 @@ html, body {
     color: #000;
     box-shadow: 0 0 30px #ff2222;
 }
-.creepy-btn.ghost {
-    border-color: #444;
-    color: #666;
-}
-.creepy-btn.ghost:hover {
-    background: #444;
-    color: #000;
-    box-shadow: none;
-}
-.btn-row {
-    display: flex;
-    gap: 20px;
-    margin-top: 30px;
-    flex-wrap: wrap;
-    justify-content: center;
-}
+.creepy-btn.ghost { border-color: #444; color: #666; font-size: 0.85rem; padding: 10px 25px; }
+.creepy-btn.ghost:hover { background: #444; color: #000; }
+.btn-row { display: flex; gap: 20px; margin-top: 30px; flex-wrap: wrap; justify-content: center; }
 
-/* ===== Видео ===== */
+/* Видео */
 .video-wrapper {
     position: relative;
-    width: 320px;
-    height: 240px;
+    width: 320px; height: 240px;
     border: 2px solid #ff2222;
     overflow: hidden;
     box-shadow: 0 0 40px rgba(255, 0, 0, 0.4);
     margin-top: 20px;
 }
 .video-wrapper video {
-    width: 100%;
-    height: 100%;
+    width: 100%; height: 100%;
     object-fit: cover;
     transform: scaleX(-1);
     filter: grayscale(1) contrast(1.5) brightness(0.7);
 }
 .fullscreen-video {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    border: none;
-    box-shadow: none;
-    margin: 0;
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    border: none; box-shadow: none; margin: 0;
     z-index: 1;
 }
-.fullscreen-video video {
-    filter: grayscale(1) contrast(2) brightness(0.4) blur(1px);
+.fullscreen-video video { filter: grayscale(1) contrast(2) brightness(0.4) blur(1px); }
+#gl-canvas {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    z-index: 1;
+    pointer-events: none;
+    mix-blend-mode: screen;
+    opacity: 0.6;
 }
 .overlay-dark {
-    position: absolute;
-    inset: 0;
+    position: absolute; inset: 0;
     background: radial-gradient(circle, transparent 20%, #000 85%);
-    pointer-events: none;
-    z-index: 2;
-    transition: background 0.5s;
+    pointer-events: none; z-index: 2;
 }
-
-/* Сканлайны */
 .scanline {
-    position: absolute;
-    inset: 0;
-    background: repeating-linear-gradient(
-        0deg,
-        rgba(0, 0, 0, 0.3),
-        rgba(0, 0, 0, 0.3) 1px,
-        transparent 1px,
-        transparent 3px
-    );
-    pointer-events: none;
-    z-index: 3;
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(0deg,
+        rgba(0,0,0,0.3), rgba(0,0,0,0.3) 1px,
+        transparent 1px, transparent 3px);
+    pointer-events: none; z-index: 3;
     animation: scan 8s linear infinite;
 }
 @keyframes scan {
     0% { background-position: 0 0; }
     100% { background-position: 0 100px; }
 }
-
-/* Шум */
 .noise {
-    position: absolute;
-    inset: 0;
+    position: absolute; inset: 0;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
     opacity: 0.15;
-    pointer-events: none;
-    z-index: 3;
+    pointer-events: none; z-index: 3;
     animation: noise 0.2s infinite;
 }
 @keyframes noise {
@@ -192,124 +150,375 @@ html, body {
     100% { transform: translate(5px, 5px); }
 }
 
-/* Canvas с лицами */
 #face-canvas {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 15;
-    pointer-events: none;
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    z-index: 15; pointer-events: none;
 }
 
-/* Сообщения */
+/* HUD */
+.hud {
+    position: absolute; top: 15px; left: 15px;
+    z-index: 25;
+    display: flex; flex-direction: column; gap: 5px;
+    font-size: 0.75rem; letter-spacing: 1px;
+    text-align: left; pointer-events: none;
+}
+.hud-item {
+    display: flex; gap: 10px;
+    background: rgba(0,0,0,0.5);
+    padding: 3px 8px;
+    border-left: 2px solid #ff2222;
+}
+.hud-label { color: #666; }
+.hud-value { color: #ff2222; font-weight: bold; }
+.hud-bottom {
+    position: absolute; bottom: 20px; left: 15px; right: 15px;
+    z-index: 25;
+    display: flex; justify-content: space-between;
+    font-size: 0.7rem; color: #444; letter-spacing: 1px;
+    pointer-events: none; text-transform: uppercase;
+}
+
 #message-container {
-    position: absolute;
-    bottom: 15%;
-    left: 50%;
+    position: absolute; bottom: 15%; left: 50%;
     transform: translateX(-50%);
-    z-index: 20;
-    width: 90%;
-    max-width: 700px;
+    z-index: 20; width: 90%; max-width: 700px;
     text-align: center;
 }
 .message-text {
     font-size: clamp(1.2rem, 3vw, 2rem);
     color: #ff2222;
     text-shadow: 0 0 20px #ff0000;
-    letter-spacing: 2px;
-    min-height: 2em;
+    letter-spacing: 2px; min-height: 2em;
     animation: flicker 3s infinite;
 }
-.status-text {
-    font-size: 0.9rem;
-    color: #666;
-    margin-top: 10px;
-    letter-spacing: 1px;
-}
+.status-text { font-size: 0.85rem; color: #666; margin-top: 10px; letter-spacing: 1px; }
 @keyframes flicker {
     0%, 100% { opacity: 1; }
-    45% { opacity: 1; }
+    45%, 47% { opacity: 1; }
     46% { opacity: 0.3; }
-    47% { opacity: 1; }
     92% { opacity: 1; }
     93% { opacity: 0.2; }
     94% { opacity: 1; }
 }
 
-/* Таймер "до конца" */
 #timer-bar {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 4px;
+    position: absolute; bottom: 0; left: 0;
+    width: 100%; height: 4px;
     background: rgba(255, 0, 0, 0.1);
     z-index: 30;
 }
 #timer-fill {
-    height: 100%;
-    width: 100%;
+    height: 100%; width: 100%;
     background: linear-gradient(90deg, #ff2222, #660000);
     box-shadow: 0 0 10px #ff0000;
     transition: width 1s linear;
 }
 
-/* Статистика финала */
+.fact-popup {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0.8);
+    z-index: 40;
+    background: rgba(0,0,0,0.9);
+    border: 2px solid #ff2222;
+    padding: 20px 30px;
+    font-size: 1.1rem; color: #ff2222;
+    letter-spacing: 2px; opacity: 0;
+    pointer-events: none; transition: all 0.4s;
+    max-width: 90%; text-align: center;
+    text-shadow: 0 0 15px #ff0000;
+}
+.fact-popup.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
 .stats {
-    margin-top: 20px;
-    color: #888;
-    font-size: 0.9rem;
-    letter-spacing: 1px;
-    line-height: 1.8;
+    margin-top: 20px; color: #888;
+    font-size: 0.85rem; letter-spacing: 1px;
+    line-height: 1.8; text-align: center; max-width: 600px;
 }
 
-/* Загрузчик */
 .loader {
-    position: fixed;
-    inset: 0;
-    background: #000;
-    z-index: 999;
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 20px;
-    color: #ff2222;
-    letter-spacing: 2px;
+    position: fixed; inset: 0;
+    background: #000; z-index: 999;
+    display: none; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 20px; color: #ff2222; letter-spacing: 2px;
 }
 .loader.active { display: flex; }
-.loader-bar {
-    width: 300px;
-    height: 4px;
-    background: rgba(255, 0, 0, 0.2);
-}
+.loader-bar { width: 300px; height: 4px; background: rgba(255,0,0,0.2); }
 #loader-fill {
-    height: 100%;
-    width: 0;
+    height: 100%; width: 0;
     background: #ff2222;
     transition: width 0.3s;
     box-shadow: 0 0 15px #ff0000;
 }
 
-/* Глитч-эффект на body */
-body.glitching {
-    animation: body-glitch 0.15s infinite;
-}
+body.glitching { animation: body-glitch 0.15s infinite; }
 @keyframes body-glitch {
     0% { transform: translate(0); filter: hue-rotate(0deg); }
     50% { transform: translate(-3px, 2px); filter: hue-rotate(90deg); }
     100% { transform: translate(3px, -2px); filter: hue-rotate(-90deg); }
 }
 
-/* Кровавый оверлей */
 .blood-overlay {
-    position: fixed;
-    inset: 0;
+    position: fixed; inset: 0;
     background: radial-gradient(circle, transparent 40%, #660000 100%);
-    z-index: 100;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 1s;
+    z-index: 100; pointer-events: none;
+    opacity: 0; transition: opacity 1.5s;
 }
 .blood-overlay.active { opacity: 1; }
+
+/* ============ ВИДЕОЧАТ ============ */
+.videochat-container {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    background: #000; z-index: 20;
+}
+.videochat-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 20px;
+    background: rgba(0,0,0,0.9);
+    border-bottom: 1px solid #220000;
+    font-size: 0.9rem; letter-spacing: 2px;
+    color: #ff4444; z-index: 5;
+}
+.live-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #ff0000;
+    box-shadow: 0 0 10px #ff0000;
+    animation: live-pulse 1s infinite;
+}
+@keyframes live-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.3; transform: scale(0.8); }
+}
+.vc-status { color: #666; font-size: 0.75rem; }
+.vc-timer { margin-left: auto; color: #ff2222; font-weight: bold; }
+
+.videochat-main {
+    flex: 1; position: relative;
+    overflow: hidden; background: #050000;
+}
+.videochat-main video {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+    filter: grayscale(1) contrast(2.2) brightness(0.35) blur(1px) hue-rotate(-20deg);
+}
+#vc-glitch-canvas {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    mix-blend-mode: screen;
+    opacity: 0.5;
+    z-index: 2;
+}
+.vc-static {
+    position: absolute; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 300 300' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+    opacity: 0.25;
+    animation: static-jitter 0.15s infinite;
+    z-index: 3; pointer-events: none;
+}
+@keyframes static-jitter {
+    0% { transform: translate(0, 0); }
+    25% { transform: translate(-3px, 2px); }
+    50% { transform: translate(2px, -3px); }
+    75% { transform: translate(-2px, -2px); }
+    100% { transform: translate(3px, 3px); }
+}
+.vc-scanlines {
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(0deg,
+        rgba(0,0,0,0.5), rgba(0,0,0,0.5) 2px,
+        transparent 2px, transparent 4px);
+    pointer-events: none; z-index: 4;
+    animation: scan 4s linear infinite;
+}
+.vc-subtitle {
+    position: absolute; bottom: 40px; left: 50%;
+    transform: translateX(-50%);
+    max-width: 85%;
+    background: rgba(0,0,0,0.8);
+    border-left: 3px solid #ff2222;
+    padding: 10px 20px;
+    color: #ff4444;
+    font-size: clamp(0.9rem, 2vw, 1.3rem);
+    letter-spacing: 1px;
+    text-shadow: 0 0 10px #ff0000;
+    z-index: 6; opacity: 0;
+    transition: opacity 0.3s;
+    text-align: center;
+    min-height: 1.5em; line-height: 1.4;
+}
+.vc-subtitle.show { opacity: 1; }
+.vc-subtitle.scream {
+    background: #660000; color: #fff;
+    font-size: clamp(1.2rem, 4vw, 2rem);
+    font-weight: bold; letter-spacing: 4px;
+    animation: scream-shake 0.3s;
+}
+@keyframes scream-shake {
+    0%, 100% { transform: translateX(-50%); }
+    25% { transform: translateX(calc(-50% - 8px)); }
+    75% { transform: translateX(calc(-50% + 8px)); }
+}
+.vc-thinking {
+    position: absolute; top: 20px; right: 20px;
+    display: none; gap: 4px;
+    padding: 6px 12px;
+    background: rgba(0,0,0,0.7);
+    border-radius: 20px; z-index: 6;
+}
+.vc-thinking.active { display: flex; }
+.vc-thinking span {
+    color: #ff2222; font-size: 1.4rem;
+    animation: think-dots 1.2s infinite;
+}
+.vc-thinking span:nth-child(2) { animation-delay: 0.2s; }
+.vc-thinking span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes think-dots {
+    0%, 60%, 100% { opacity: 0.2; }
+    30% { opacity: 1; }
+}
+.vc-label {
+    position: absolute; bottom: 20px; left: 20px;
+    padding: 6px 14px;
+    background: rgba(0,0,0,0.7);
+    border-left: 3px solid #ff2222;
+    color: #ff2222;
+    font-size: 0.85rem; letter-spacing: 2px;
+    z-index: 6;
+}
+.videochat-bottom {
+    display: flex; align-items: center;
+    justify-content: space-between;
+    gap: 15px; padding: 15px;
+    background: rgba(0,0,0,0.95);
+    border-top: 1px solid #220000;
+}
+.vc-self {
+    position: relative;
+    width: 140px; height: 100px;
+    border: 1px solid #550000;
+    overflow: hidden;
+}
+.vc-self video {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+    filter: grayscale(1) contrast(1.5) brightness(0.6);
+}
+.vc-self-label {
+    position: absolute; bottom: 4px; left: 6px;
+    font-size: 0.65rem; color: #ff4444; letter-spacing: 1px;
+}
+.vc-self-rec {
+    position: absolute; top: 4px; right: 6px;
+    font-size: 0.6rem; color: #ff0000;
+    letter-spacing: 1px;
+    animation: live-pulse 1s infinite;
+}
+.vc-controls { display: flex; gap: 10px; }
+.vc-btn {
+    width: 50px; height: 50px;
+    border-radius: 50%;
+    background: #0a0a0a;
+    border: 1px solid #330000;
+    color: #666; font-size: 1.2rem;
+    cursor: pointer; transition: all 0.3s;
+    display: flex; align-items: center; justify-content: center;
+}
+.vc-btn:hover {
+    background: #1a1a1a;
+    border-color: #ff2222;
+    transform: scale(1.05);
+}
+.vc-btn-active {
+    background: #1a0000;
+    border-color: #ff2222;
+    color: #ff2222;
+    box-shadow: 0 0 15px rgba(255, 0, 0, 0.4);
+}
+.vc-btn-danger {
+    background: #440000;
+    border-color: #ff0000;
+    color: #ff0000;
+}
+.vc-btn-danger:hover {
+    background: #ff0000; color: #000;
+    box-shadow: 0 0 25px #ff0000;
+}
+.vc-mic-hint {
+    position: absolute; bottom: 130px; left: 50%;
+    transform: translateX(-50%);
+    display: flex; flex-direction: column;
+    gap: 8px; align-items: center;
+    z-index: 7; width: min(90%, 400px);
+}
+#vc-mic-text {
+    font-size: 0.75rem; color: #666;
+    letter-spacing: 1px;
+    animation: mic-flicker 2s infinite;
+}
+@keyframes mic-flicker {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+.vc-input {
+    width: 100%;
+    background: rgba(0,0,0,0.85);
+    border: 1px solid #550000;
+    color: #dddddd;
+    padding: 10px 15px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    letter-spacing: 0.5px;
+    outline: none; text-align: center;
+    transition: all 0.3s;
+}
+.vc-input:focus {
+    border-color: #ff2222;
+    box-shadow: 0 0 15px rgba(255, 0, 0, 0.5);
+}
+.vc-input::placeholder { color: #444; }
+
+.tab-warning {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 500;
+    display: none; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: #ff2222; font-size: 2rem;
+    letter-spacing: 3px; text-align: center;
+    padding: 20px; animation: fadeIn 0.3s;
+}
+.tab-warning.active { display: flex; }
+.tab-warning .small { font-size: 1rem; color: #666; margin-top: 15px; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.end-video-wrap {
+    margin-top: 20px;
+    width: min(90%, 400px);
+    border: 1px solid #330000;
+    display: none;
+}
+.end-video-wrap.active { display: block; }
+.end-video-wrap video {
+    width: 100%; display: block;
+    filter: grayscale(0.5) contrast(1.2);
+}
+
+@media (max-width: 600px) {
+    .hud { font-size: 0.6rem; top: 8px; left: 8px; }
+    .hud-bottom { font-size: 0.6rem; bottom: 12px; left: 8px; right: 8px; }
+    .message-text { font-size: 1.1rem; }
+    .fact-popup { font-size: 0.9rem; padding: 15px 20px; }
+    .tab-warning { font-size: 1.4rem; }
+    .videochat-header { padding: 8px 12px; font-size: 0.75rem; }
+    .vc-self { width: 100px; height: 75px; }
+    .vc-btn { width: 42px; height: 42px; font-size: 1rem; }
+    .vc-subtitle { font-size: 0.85rem; padding: 8px 12px; bottom: 20px; }
+    .vc-mic-hint { bottom: 110px; }
+    .vc-label { font-size: 0.7rem; padding: 4px 10px; bottom: 10px; left: 10px; }
+}
