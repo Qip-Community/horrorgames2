@@ -1,7 +1,7 @@
 'use strict';
 /* ============================================================
-   QIP 2012 — FIXED EDITION
-   ИСПРАВЛЕНО: дублирование сообщений при клике на контакты
+   QIP 2012 — FIXED EDITION v2
+   ИСПРАВЛЕНО: обрыв диалогов при switchTo + дублирование
    ============================================================ */
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
     // ==================== SAVE ====================
-    const SAVE_KEY = 'qip2012_save_v5';
+    const SAVE_KEY = 'qip2012_save_v6';
     const DEFAULT_SAVE = {
         act: 1, scene: 0, inventory: [], achievements: [],
         deaths: 0, survived: 0, best: 0,
@@ -66,8 +66,8 @@ document.addEventListener('DOMContentLoaded', function() {
         currentRoom: 'desk',
         coopMode: false, coopCode: null, coopChannel: null,
         ambientTimer: null, eyesTimer: null,
-        activeTimers: [],       // ВСЕ активные таймеры для отмены
-        dialoguePlayed: {}      // Какие диалоги уже проиграны
+        activeTimers: [],
+        scriptActive: false
     };
 
     state.act = state.save.act || 1;
@@ -78,9 +78,8 @@ document.addEventListener('DOMContentLoaded', function() {
     state.sanity = state.save.sanity ?? 100;
     state.inventory = new Set(state.save.inventory || []);
     state.currentRoom = state.save.room || 'desk';
-    state.dialoguePlayed = state.save.dialoguePlayed || {};
 
-    // ==================== DOM CACHE ====================
+    // ==================== DOM ====================
     const D = {
         bootScreen: $('boot-screen'), intro: $('intro'),
         startBtn: $('start-btn'), continueBtn: $('continue-btn'),
@@ -126,12 +125,11 @@ document.addEventListener('DOMContentLoaded', function() {
         desktopIcons: $('desktop-icons')
     };
 
-    // ==================== TIMER MANAGEMENT (ФИКС) ====================
+    // ==================== TIMER MANAGEMENT ====================
     function registerTimer(id) {
         state.activeTimers.push(id);
         return id;
     }
-
     function cancelAllDialogueTimers() {
         state.activeTimers.forEach(id => {
             clearTimeout(id);
@@ -139,8 +137,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         state.activeTimers = [];
     }
-
-    // Обёртка для setTimeout с автоматической регистрацией
     function safeTimeout(fn, delay) {
         const id = setTimeout(fn, delay);
         registerTimer(id);
@@ -274,7 +270,7 @@ document.addEventListener('DOMContentLoaded', function() {
             D.micStatus.className = 'mic-status granted';
             return true;
         } catch (e) {
-            D.micStatus.textContent = '❌ Доступ к микрофону запрещён';
+            D.micStatus.textContent = '❌ Доступ запрещён';
             D.micStatus.className = 'mic-status denied';
             return false;
         }
@@ -465,42 +461,27 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ==================== CUTSCENE ====================
     const CUTSCENES = {
-        intro: {
-            duration: 8000,
-            scenes: [
-                { time: 0,    svg: cutSvgCRT(), text: 'Windows XP... 2012 год...' },
-                { time: 2500, svg: cutSvgQIP(), text: 'QIP 2012. Твой любимый мессенджер.' },
-                { time: 5500, svg: cutSvgEye(), text: 'Ты давно не заходил в него...' }
-            ]
-        },
-        act2: {
-            duration: 6000,
-            scenes: [
-                { time: 0,    svg: cutSvgContact(), text: 'Кто-то добавил тебя в контакты.' },
-                { time: 3000, svg: cutSvgEye(), text: 'Контакт без имени. Без фото. Без статуса.' }
-            ]
-        },
-        act3: {
-            duration: 7000,
-            scenes: [
-                { time: 0,    svg: cutSvgDisappear(), text: 'Маша отключилась...' },
-                { time: 3000, svg: cutSvgPhoto(), text: 'IMG_2013.jpg содержит то, что не должно существовать.' }
-            ]
-        },
-        act4: {
-            duration: 8000,
-            scenes: [
-                { time: 0,    svg: cutSvgHunter(), text: 'Он вышел из чата в реальный мир.' },
-                { time: 4000, svg: cutSvgEye(), text: 'Теперь он охотится за тобой.' }
-            ]
-        },
-        act5: {
-            duration: 7000,
-            scenes: [
-                { time: 0,    svg: cutSvgFinal(), text: 'Последний вопрос.' },
-                { time: 3500, svg: cutSvgEye(), text: 'Ответь правильно — и ты свободен.' }
-            ]
-        }
+        intro: { duration: 8000, scenes: [
+            { time: 0,    svg: cutSvgCRT(), text: 'Windows XP... 2012 год...' },
+            { time: 2500, svg: cutSvgQIP(), text: 'QIP 2012. Твой любимый мессенджер.' },
+            { time: 5500, svg: cutSvgEye(), text: 'Ты давно не заходил в него...' }
+        ]},
+        act2: { duration: 6000, scenes: [
+            { time: 0,    svg: cutSvgContact(), text: 'Кто-то добавил тебя в контакты.' },
+            { time: 3000, svg: cutSvgEye(), text: 'Контакт без имени. Без фото. Без статуса.' }
+        ]},
+        act3: { duration: 7000, scenes: [
+            { time: 0,    svg: cutSvgDisappear(), text: 'Маша отключилась...' },
+            { time: 3000, svg: cutSvgPhoto(), text: 'IMG_2013.jpg содержит то, что не должно существовать.' }
+        ]},
+        act4: { duration: 8000, scenes: [
+            { time: 0,    svg: cutSvgHunter(), text: 'Он вышел из чата в реальный мир.' },
+            { time: 4000, svg: cutSvgEye(), text: 'Теперь он охотится за тобой.' }
+        ]},
+        act5: { duration: 7000, scenes: [
+            { time: 0,    svg: cutSvgFinal(), text: 'Последний вопрос.' },
+            { time: 3500, svg: cutSvgEye(), text: 'Ответь правильно — и ты свободен.' }
+        ]}
     };
 
     function cutSvgCRT() { return `<svg viewBox="0 0 400 300" width="100%" height="100%" preserveAspectRatio="xMidYMid meet"><rect width="400" height="300" fill="#000"/><rect x="20" y="20" width="360" height="240" fill="#111" stroke="#333" stroke-width="2" rx="10"/><rect x="40" y="40" width="320" height="200" fill="#050" opacity="0.4"/><text x="200" y="150" fill="#0f0" font-family="monospace" font-size="20" text-anchor="middle">C:\\&gt;_</text><rect x="20" y="270" width="360" height="10" fill="#222" rx="3"/><text x="200" y="290" fill="#666" font-family="monospace" font-size="10" text-anchor="middle">Windows XP Professional</text></svg>`; }
@@ -575,7 +556,6 @@ document.addEventListener('DOMContentLoaded', function() {
             state.correctAnswers = 0; state.totalQuestions = 0;
             state.gameTime = 0; state.sanity = 100;
             state.inventory = new Set();
-            state.dialoguePlayed = {};
         } else {
             state.act = state.save.act || 1;
             state.sceneIndex = state.save.scene || 0;
@@ -585,7 +565,6 @@ document.addEventListener('DOMContentLoaded', function() {
             state.sanity = state.save.sanity ?? 100;
             state.inventory = new Set(state.save.inventory || []);
             state.currentRoom = state.save.room || 'desk';
-            state.dialoguePlayed = state.save.dialoguePlayed || {};
         }
 
         initAudio();
@@ -627,7 +606,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (coopJoin) initCoop(coopJoin, false);
     }
 
-    // ==================== SVG АВАТАРЫ ====================
+    // ==================== SVG AVATARS ====================
     function svgAvatar(type) {
         const svgs = {
             admin: `<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><rect width="40" height="40" fill="#9ab"/><circle cx="20" cy="15" r="7" fill="#567"/><ellipse cx="20" cy="32" rx="12" ry="10" fill="#567"/></svg>`,
@@ -668,7 +647,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="status ${statusClass}">${c.status}</div>
                 </div>
             `;
-            div.addEventListener('click', () => openChat(id, div));
+            div.addEventListener('click', () => openChat(id, div, false));
             D.contacts.appendChild(div);
         });
     }
@@ -681,24 +660,35 @@ document.addEventListener('DOMContentLoaded', function() {
         showNotification(`👤 Новый контакт: ${CONTACTS[id].name}`);
     }
 
-    // ==================== ФИКС: openChat без дублирования ====================
-    function openChat(user, el) {
-        // Если кликнули на тот же контакт — ничего не делаем
-        if (state.currentUser === user) {
-            console.log('[QIP] Уже в чате с', user);
+    // ==================== ★★★ ФИКС: openChat со свитчем ★★★ ====================
+    // isScriptSwitch = true:  вызов из playScript (switchTo) — НЕ отменять таймеры, НЕ блокировать
+    // isScriptSwitch = false: клик игрока — отменить таймеры и открыть чат
+    function openChat(user, el, isScriptSwitch = false) {
+        // При клике игрока на тот же контакт — игнорируем
+        if (!isScriptSwitch && state.currentUser === user) {
+            console.log('[QIP] Уже в чате с', user, '(клик)');
             return;
         }
 
-        // Отменяем ВСЕ таймеры старого диалога
-        cancelAllDialogueTimers();
+        // Переключение из скрипта на тот же контакт — тоже игнорируем (ничего не меняется)
+        if (isScriptSwitch && state.currentUser === user) {
+            return;
+        }
+
+        // Отменяем таймеры старого диалога ТОЛЬКО при клике игрока
+        if (!isScriptSwitch) {
+            cancelAllDialogueTimers();
+        }
 
         state.currentUser = user;
         $$('.contact').forEach(x => x.classList.remove('active'));
-        if (el) el.classList.add('active');
+        let target = el;
+        if (!target) target = document.querySelector(`[data-user="${user}"]`);
+        if (target) target.classList.add('active');
+
         D.chatHeader.textContent = `Чат с ${CONTACTS[user].name}`;
         D.messages.innerHTML = '';
 
-        // Заблокировать ввод, если это закрытый контакт
         const isLocked = CONTACTS[user] && CONTACTS[user].locked;
         D.messageInput.disabled = isLocked;
         D.sendBtn.disabled = isLocked;
@@ -706,86 +696,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
         setTimeout(() => { try { if (!isLocked) D.messageInput.focus(); } catch (e) {} }, 100);
 
-        // Загружаем историю, ЕСЛИ ЕСТЬ
+        // Восстановить историю
         if (state.dialogues[user] && state.dialogues[user].length > 0) {
             state.dialogues[user].forEach(m => addMessage(m.text, m.type, false, false, true));
-            console.log('[QIP] История для', user, 'загружена:', state.dialogues[user].length, 'сообщений');
         } else {
-            // Первый раз — создаём пустую историю
-            state.dialogues[user] = [];
-            console.log('[QIP] Первый вход в чат с', user);
-
-            // Проиграть диалог ТОЛЬКО ОДИН РАЗ
-            if (!state.dialoguePlayed[user]) {
-                state.dialoguePlayed[user] = true;
-                state.save.dialoguePlayed = state.dialoguePlayed;
-                saveGame();
-                // Небольшая задержка, чтобы анимация открытия окна завершилась
-                safeTimeout(() => {
-                    if (state.currentUser === user) {
-                        playDialogue(user);
-                    }
-                }, 300);
-            }
+            if (!state.dialogues[user]) state.dialogues[user] = [];
         }
+        console.log('[QIP] Открыт чат с', user, isScriptSwitch ? '(скрипт)' : '(игрок)');
     }
 
-    // ==================== DIALOGUES (для контактов) ====================
-    const DIALOGUES = {
-        admin: [
-            { delay: 800,  text: 'Привет. Ты новый тут? Не заходи в чат с ником "???".', type: 'them' },
-            { delay: 2800, text: 'Серьёзно. Если увидишь его в сети — сразу закрывай QIP.', type: 'them' },
-            { delay: 5200, text: 'Он уже забрал 3 моих контакта. Маша следующая.', type: 'them' },
-            { delay: 7800, text: 'Я чувствую, как он смотрит через экран...', type: 'them' },
-            { delay: 10500, text: 'Посмотри в "Мои фото". Там есть IMG_2013.jpg.', type: 'them' },
-            { delay: 13000, text: 'И прочитай notes.txt. Это важно.', type: 'them' }
-        ],
-        masha: [
-            { delay: 900,  text: 'приветик :) ты видел странные сообщения от ???', type: 'them' },
-            { delay: 3000, text: 'я зашла в его чат... и теперь у меня в комнате кто-то ходит', type: 'them' },
-            { delay: 5400, text: 'пожалуйста помоги мне', type: 'them' },
-            { delay: 7800, text: 'он за дверью', type: 'creepy' },
-            { delay: 10200, text: 'он смотрит на меня через экран', type: 'creepy' }
-        ],
-        pavel: [
-            { delay: 1000, text: 'Слушай, админ пропал.', type: 'them' },
-            { delay: 3000, text: 'Вчера писал мне ночью. Говорил "он среди нас".', type: 'them' },
-            { delay: 5500, text: 'Потом QIP сам закрылся. И статус админа стал "не в сети".', type: 'them' },
-            { delay: 8500, text: 'Ты можешь открыть его notes.txt?', type: 'them' }
-        ],
-        unknown: [
-            { delay: 400,  text: 'ты меня видишь?', type: 'creepy' },
-            { delay: 2200, text: 'я вижу тебя. вижу твою комнату.', type: 'creepy' },
-            { delay: 4200, text: 'обернись.', type: 'creepy' },
-            { delay: 6000, text: 'СЛИШКОМ ПОЗДНО.', type: 'creepy' }
-        ]
-    };
-
-    function playDialogue(user) {
-        const script = DIALOGUES[user];
-        if (!script) {
-            console.log('[QIP] Нет скрипта для', user);
-            return;
-        }
-        console.log('[QIP] Проигрываем диалог для', user);
-
-        script.forEach(line => {
-            safeTimeout(() => {
-                // Проверяем, что всё ещё в этом чате
-                if (state.currentUser !== user) {
-                    console.log('[QIP] Пропущено (не в чате):', line.text);
-                    return;
-                }
-                addMessage(line.text, line.type);
-                if (line.type === 'creepy') {
-                    triggerGlitch();
-                    whisperSound();
-                }
-            }, line.delay);
-        });
-    }
-
-    // ==================== ФИКС: addMessage с защитой от дублей ====================
+    // ==================== MESSAGES ====================
     function addMessage(text, type = 'them', animate = true, sound = true, fromHistory = false) {
         const div = document.createElement('div');
         div.className = `message ${type}`;
@@ -795,18 +715,15 @@ document.addEventListener('DOMContentLoaded', function() {
         D.messages.scrollTop = D.messages.scrollHeight;
         if (sound && type !== 'system') messageSound();
 
-        // Записываем в историю ТОЛЬКО новые сообщения (не при восстановлении)
         if (!fromHistory && state.currentUser) {
             if (!state.dialogues[state.currentUser]) state.dialogues[state.currentUser] = [];
             const hist = state.dialogues[state.currentUser];
             const last = hist[hist.length - 1];
-            // Проверка на дубликат — только добавляем, если последнее отличается
             if (!last || last.text !== text || last.type !== type) {
                 hist.push({ text, type });
             }
         }
 
-        // Кооп
         if (state.coopMode && state.coopChannel && !fromHistory) {
             try {
                 state.coopChannel.postMessage({ type: 'message', text, msgType: type, sender: 'other' });
@@ -815,7 +732,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return div;
     }
 
-    // ==================== ФИКС: sendMessage без спама ====================
+    // ==================== SEND MESSAGE ====================
     function sendMessage() {
         const text = D.messageInput.value.trim();
         if (!text || !state.currentUser) return;
@@ -867,11 +784,13 @@ document.addEventListener('DOMContentLoaded', function() {
         if (e.key === 'Enter') { e.preventDefault(); sendMessage(); }
     });
 
-    // ==================== ФИКС: playScript с отменой таймеров ====================
+    // ==================== ★★★ ФИКС: playScript с user и switchTo ★★★ ====================
+    // Каждая line может иметь user (от кого сообщение).
+    // Перед добавлением — переключаемся на нужный чат (isScriptSwitch=true),
+    // это НЕ отменяет таймеры других линий.
     async function playScript(script) {
-        // Отменяем все старые таймеры перед запуском нового скрипта
-        cancelAllDialogueTimers();
-
+        console.log('[QIP] Запуск сценария, шагов:', script.length);
+        state.scriptActive = true;
         const t0 = Date.now();
         const promises = script.map(async line => {
             const waitTime = line.delay - (Date.now() - t0);
@@ -881,11 +800,22 @@ document.addEventListener('DOMContentLoaded', function() {
                     registerTimer(id);
                 });
             }
+
             if (!state.gameStarted || state.paused) return;
-            if (line.switchTo && state.currentUser !== line.switchTo) {
-                const c = document.querySelector(`[data-user="${line.switchTo}"]`);
-                if (c) c.click();
+
+            // Определяем чат, в который идёт сообщение
+            let targetUser = line.user || line.switchTo || state.currentUser;
+            if (line.switchTo && line.switchTo !== state.currentUser) {
+                targetUser = line.switchTo;
+                const c = document.querySelector(`[data-user="${targetUser}"]`);
+                openChat(targetUser, c, true);  // ★ isScriptSwitch = true
+            } else if (line.user && line.user !== state.currentUser) {
+                targetUser = line.user;
+                const c = document.querySelector(`[data-user="${targetUser}"]`);
+                openChat(targetUser, c, true);
             }
+
+            // Выполняем действия
             if (line.unlockContact) unlockContact(line.unlockContact);
             if (line.addInventory) addToInventory(line.addInventory);
             if (line.achievement) showAchievement(line.achievement);
@@ -895,10 +825,21 @@ document.addEventListener('DOMContentLoaded', function() {
             if (line.flash) flashScreen(line.flash);
             if (line.whisper) whisperSound();
             if (line.scare) scareSound();
-            if (line.action) line.action();
-            if (line.text) addMessage(line.text, line.type || 'them');
+            if (line.action) {
+                try { await line.action(); } catch (e) { console.error('[QIP] action error:', e); }
+            }
+            if (line.text) {
+                // Гарантируем, что чат правильный
+                if (targetUser && state.currentUser !== targetUser) {
+                    const c = document.querySelector(`[data-user="${targetUser}"]`);
+                    openChat(targetUser, c, true);
+                }
+                addMessage(line.text, line.type || 'them');
+            }
         });
         await Promise.all(promises);
+        state.scriptActive = false;
+        console.log('[QIP] Сценарий завершён');
     }
 
     // ==================== ACTS ====================
@@ -917,21 +858,24 @@ document.addEventListener('DOMContentLoaded', function() {
         setObjective('осмотреться');
         state.save.knownContacts = ['admin', 'masha', 'pavel'];
         renderContacts();
+        // Убираем блокировку от старого запуска
+        cancelAllDialogueTimers();
+
         const script = [
-            { delay: 1000, switchTo: 'admin', text: 'Привет. Ты новый тут? Не заходи в чат с ником "???".', type: 'them' },
-            { delay: 4000, text: 'Серьёзно. Если увидишь его в сети — сразу закрывай QIP.', type: 'them' },
-            { delay: 7000, text: 'Он уже забрал 3 контакта. Маша следующая.', type: 'them' },
-            { delay: 11000, text: 'Посмотри в "Мои фото". Там есть IMG_2013.jpg.', type: 'them' },
-            { delay: 15000, text: 'И прочитай notes.txt.', type: 'them', setObjective: 'прочитать notes.txt' },
-            { delay: 20000, switchTo: 'masha', text: 'приветик :) ты видел странные сообщения от ???', type: 'them' },
-            { delay: 24000, text: 'я зашла в его чат... и теперь у меня в комнате кто-то ходит', type: 'them' },
-            { delay: 28000, text: 'пожалуйста помоги мне', type: 'them' },
-            { delay: 33000, switchTo: 'pavel', text: 'Слушай, админ пропал.', type: 'them' },
-            { delay: 37000, text: 'Вчера писал мне ночью. Говорил "он среди нас".', type: 'them' },
-            { delay: 41000, text: 'Потом QIP сам закрылся.', type: 'them', unlockContact: 'olga' },
-            { delay: 46000, switchTo: 'admin', text: 'Ты читал notes.txt?', type: 'them', setObjective: 'прочитать notes.txt и найти IMG_2013.jpg' },
-            { delay: 52000, text: 'Тестирование начнётся само.', type: 'them' },
-            { delay: 58000, text: 'Ну что, готов?', type: 'them', action: async () => {
+            { delay: 1000,  user: 'admin', switchTo: 'admin', text: 'Привет. Ты новый тут? Не заходи в чат с ником "???".', type: 'them' },
+            { delay: 4000,  user: 'admin', text: 'Серьёзно. Если увидишь его в сети — сразу закрывай QIP.', type: 'them' },
+            { delay: 7000,  user: 'admin', text: 'Он уже забрал 3 контакта. Маша следующая.', type: 'them' },
+            { delay: 11000, user: 'admin', text: 'Посмотри в "Мои фото". Там есть IMG_2013.jpg.', type: 'them' },
+            { delay: 15000, user: 'admin', text: 'И прочитай notes.txt.', type: 'them', setObjective: 'прочитать notes.txt' },
+            { delay: 20000, user: 'masha', switchTo: 'masha', text: 'приветик :) ты видел странные сообщения от ???', type: 'them' },
+            { delay: 24000, user: 'masha', text: 'я зашла в его чат... и теперь у меня в комнате кто-то ходит', type: 'them' },
+            { delay: 28000, user: 'masha', text: 'пожалуйста помоги мне', type: 'them' },
+            { delay: 33000, user: 'pavel', switchTo: 'pavel', text: 'Слушай, админ пропал.', type: 'them' },
+            { delay: 37000, user: 'pavel', text: 'Вчера писал мне ночью. Говорил "он среди нас".', type: 'them' },
+            { delay: 41000, user: 'pavel', text: 'Потом QIP сам закрылся.', type: 'them', unlockContact: 'olga' },
+            { delay: 46000, user: 'admin', switchTo: 'admin', text: 'Ты читал notes.txt?', type: 'them', setObjective: 'прочитать notes.txt и найти IMG_2013.jpg' },
+            { delay: 52000, user: 'admin', text: 'Тестирование начнётся само.', type: 'them' },
+            { delay: 58000, user: 'admin', text: 'Ну что, готов?', type: 'them', action: async () => {
                 showNotification('⏭ АКТ I завершён');
                 await wait(2000);
                 await playCutscene('act2');
@@ -1074,17 +1018,18 @@ document.addEventListener('DOMContentLoaded', function() {
         setObjective('разобраться');
         showNotification('💀 АКТ III');
         unlockContact('olga');
+        cancelAllDialogueTimers();
         const script = [
-            { delay: 2000, switchTo: 'admin', text: 'Слушай... я не уверен, что это я.', type: 'creepy' },
-            { delay: 6000, text: 'Вчера я проснулся в 3:33.', type: 'creepy' },
-            { delay: 11000, text: 'Проверь IMG_2013.jpg.', type: 'them' },
-            { delay: 16000, text: 'Проверь.', type: 'them', action: () => {
+            { delay: 2000,  user: 'admin', switchTo: 'admin', text: 'Слушай... я не уверен, что это я.', type: 'creepy' },
+            { delay: 6000,  user: 'admin', text: 'Вчера я проснулся в 3:33.', type: 'creepy' },
+            { delay: 11000, user: 'admin', text: 'Проверь IMG_2013.jpg.', type: 'them' },
+            { delay: 16000, user: 'admin', text: 'Проверь.', type: 'them', action: () => {
                 const img = document.querySelector('[data-img="5"]');
                 if (img) img.classList.add('haunted-img');
             }},
-            { delay: 22000, switchTo: 'masha', text: 'Он здесь.', type: 'creepy' },
-            { delay: 24000, text: 'Он за моей спиной.', type: 'creepy', sanity: -10 },
-            { delay: 26000, text: 'ПРОЩАЙ', type: 'creepy', action: () => {
+            { delay: 22000, user: 'masha', switchTo: 'masha', text: 'Он здесь.', type: 'creepy' },
+            { delay: 24000, user: 'masha', text: 'Он за моей спиной.', type: 'creepy', sanity: -10 },
+            { delay: 26000, user: 'masha', text: 'ПРОЩАЙ', type: 'creepy', action: () => {
                 const m = document.querySelector('[data-user="masha"]');
                 if (m) {
                     const s = m.querySelector('.status');
@@ -1094,14 +1039,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 showNotification('💀 Маша отключилась');
             }},
-            { delay: 32000, switchTo: 'admin', text: 'Маша пропала.', type: 'them' },
-            { delay: 37000, text: 'Слушай, я должен показать кое-что.', type: 'them' },
-            { delay: 42000, text: 'В QIP есть скрытая папка.', type: 'them', setObjective: 'изучить файлы' },
-            { delay: 48000, text: 'Открой последнюю фотку.', type: 'them' },
-            { delay: 53000, text: 'Осторожно.', type: 'creepy', action: () => {
+            { delay: 32000, user: 'admin', switchTo: 'admin', text: 'Маша пропала.', type: 'them' },
+            { delay: 37000, user: 'admin', text: 'Слушай, я должен показать кое-что.', type: 'them' },
+            { delay: 42000, user: 'admin', text: 'В QIP есть скрытая папка.', type: 'them', setObjective: 'изучить файлы' },
+            { delay: 48000, user: 'admin', text: 'Открой последнюю фотку.', type: 'them' },
+            { delay: 53000, user: 'admin', text: 'Осторожно.', type: 'creepy', action: () => {
                 setTimeout(() => { if (state.act < 4) openImage('5'); }, 30000);
             }},
-            { delay: 60000, text: 'Готов к правде?', type: 'them', action: async () => {
+            { delay: 60000, user: 'admin', text: 'Готов к правде?', type: 'them', action: async () => {
                 showNotification('⏭ АКТ III завершён');
                 await wait(2000);
                 await playCutscene('act4');
@@ -1116,19 +1061,20 @@ document.addEventListener('DOMContentLoaded', function() {
         setObjective('выжить');
         showNotification('👁️ АКТ IV');
         unlockContact('max');
+        cancelAllDialogueTimers();
         const script = [
-            { delay: 2000, switchTo: 'admin', text: 'Я... не помню, что было 3 часа.', type: 'creepy' },
-            { delay: 6000, text: 'Мой статус меняется.', type: 'creepy' },
-            { delay: 12000, switchTo: 'max', text: 'Привет.', type: 'them' },
-            { delay: 16000, text: 'Я вижу его QIP онлайн.', type: 'them' },
-            { delay: 20000, text: 'Я был у него. Он сидит перед монитором.', type: 'them' },
-            { delay: 24000, text: 'На его экране открыт чат с ТОБОЙ.', type: 'creepy' },
-            { delay: 30000, switchTo: 'olga', text: 'Я знаю, кто такой ???', type: 'them' },
-            { delay: 34000, text: 'Это души тех, кто не вышел из QIP в 2013.', type: 'them' },
-            { delay: 38000, text: 'Они ищут компанию.', type: 'them' },
-            { delay: 42000, text: 'Ты можешь выйти. Пройди тест.', type: 'them', addInventory: '🗝️ Ключ от QIP' },
-            { delay: 46000, text: 'Ответь правильно на ВСЁ.', type: 'them' },
-            { delay: 54000, switchTo: 'unknown', text: 'Ты готов?', type: 'creepy', action: () => {
+            { delay: 2000,  user: 'admin', switchTo: 'admin', text: 'Я... не помню, что было 3 часа.', type: 'creepy' },
+            { delay: 6000,  user: 'admin', text: 'Мой статус меняется.', type: 'creepy' },
+            { delay: 12000, user: 'max', switchTo: 'max', text: 'Привет.', type: 'them' },
+            { delay: 16000, user: 'max', text: 'Я вижу его QIP онлайн.', type: 'them' },
+            { delay: 20000, user: 'max', text: 'Я был у него. Он сидит перед монитором.', type: 'them' },
+            { delay: 24000, user: 'max', text: 'На его экране открыт чат с ТОБОЙ.', type: 'creepy' },
+            { delay: 30000, user: 'olga', switchTo: 'olga', text: 'Я знаю, кто такой ???', type: 'them' },
+            { delay: 34000, user: 'olga', text: 'Это души тех, кто не вышел из QIP в 2013.', type: 'them' },
+            { delay: 38000, user: 'olga', text: 'Они ищут компанию.', type: 'them' },
+            { delay: 42000, user: 'olga', text: 'Ты можешь выйти. Пройди тест.', type: 'them', addInventory: '🗝️ Ключ от QIP' },
+            { delay: 46000, user: 'olga', text: 'Ответь правильно на ВСЁ.', type: 'them' },
+            { delay: 54000, user: 'unknown', switchTo: 'unknown', text: 'Ты готов?', type: 'creepy', action: () => {
                 unlockContact('unknown');
                 const u = document.querySelector('[data-user="unknown"]');
                 if (u) {
@@ -1139,15 +1085,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 state.unknownUnlocked = true;
             }},
-            { delay: 58000, text: 'Хорошо.', type: 'creepy' },
-            { delay: 60000, text: 'Маленькая игра.', type: 'creepy', action: () => {
+            { delay: 58000, user: 'unknown', text: 'Хорошо.', type: 'creepy' },
+            { delay: 60000, user: 'unknown', text: 'Маленькая игра.', type: 'creepy', action: () => {
                 for (let i = 0; i < 5; i++) {
                     setTimeout(() => triggerGlitch(2), i * 800);
                     setTimeout(whisperSound, i * 800 + 200);
                 }
                 scareSound();
             }},
-            { delay: 66000, text: 'Готов?', type: 'creepy', action: async () => {
+            { delay: 66000, user: 'unknown', text: 'Готов?', type: 'creepy', action: async () => {
                 showNotification('⏭ АКТ IV завершён');
                 await wait(2000);
                 await playCutscene('act5');
@@ -1172,11 +1118,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const q = questions[i];
             if (state.currentUser !== 'unknown' && state.unknownUnlocked) {
                 const u = document.querySelector('[data-user="unknown"]');
-                if (u && state.currentUser !== 'unknown') {
-                    // Открываем чат с ??? через открытый метод
-                    const isActive = u.classList.contains('active');
-                    if (!isActive) u.click();
-                }
+                if (u && state.currentUser !== 'unknown') u.click();
             }
             await wait(500);
             addMessage(q.question, 'creepy');
@@ -1705,7 +1647,7 @@ P.S. В финале — не отвечай "да". Никогда.`;
         });
     }
 
-    // ==================== КНОПКИ ====================
+    // ==================== BUTTONS ====================
     function bindButton(btn, handler) {
         if (!btn) return;
         let touched = false;
