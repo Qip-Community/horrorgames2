@@ -1,18 +1,13 @@
 'use strict';
 /* ============================================================
-   QIP 2012 — ABSOLUTE FINAL EDITION
-   Все баги кнопок исправлены. Добавлены: MP3-плеер, SVG-аватары,
-   PWA, Firebase-кооп (опционально).
+   QIP 2012 — FIXED EDITION
+   ИСПРАВЛЕНО: дублирование сообщений при клике на контакты
    ============================================================ */
 
-// ============================================================
-// КРИТИЧЕСКИЙ ФИКС: ждём загрузку DOM и навешиваем обработчики
-// через addEventListener, а не через onclick в HTML
-// ============================================================
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('[QIP] DOM loaded, запуск игры...');
+    console.log('[QIP] DOM loaded');
 
-    // ==================== SHORTCUTS ====================
+    // ==================== HELPERS ====================
     const $ = id => document.getElementById(id);
     const $$ = sel => document.querySelectorAll(sel);
     const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -28,7 +23,8 @@ document.addEventListener('DOMContentLoaded', function() {
         knownContacts: ['admin'], unlockedEntries: ['qip', 'admin'],
         gameTime: 0, sanity: 100, endings: [], secretsFound: [],
         room: 'desk', unlockedRooms: ['desk'],
-        playerName: '', lastSave: 0
+        playerName: '', lastSave: 0,
+        dialoguePlayed: {}
     };
 
     function loadSave() {
@@ -70,7 +66,8 @@ document.addEventListener('DOMContentLoaded', function() {
         currentRoom: 'desk',
         coopMode: false, coopCode: null, coopChannel: null,
         ambientTimer: null, eyesTimer: null,
-        firebaseRoom: null
+        activeTimers: [],       // ВСЕ активные таймеры для отмены
+        dialoguePlayed: {}      // Какие диалоги уже проиграны
     };
 
     state.act = state.save.act || 1;
@@ -81,6 +78,7 @@ document.addEventListener('DOMContentLoaded', function() {
     state.sanity = state.save.sanity ?? 100;
     state.inventory = new Set(state.save.inventory || []);
     state.currentRoom = state.save.room || 'desk';
+    state.dialoguePlayed = state.save.dialoguePlayed || {};
 
     // ==================== DOM CACHE ====================
     const D = {
@@ -127,6 +125,27 @@ document.addEventListener('DOMContentLoaded', function() {
         roomExit: $('room-exit'),
         desktopIcons: $('desktop-icons')
     };
+
+    // ==================== TIMER MANAGEMENT (ФИКС) ====================
+    function registerTimer(id) {
+        state.activeTimers.push(id);
+        return id;
+    }
+
+    function cancelAllDialogueTimers() {
+        state.activeTimers.forEach(id => {
+            clearTimeout(id);
+            clearInterval(id);
+        });
+        state.activeTimers = [];
+    }
+
+    // Обёртка для setTimeout с автоматической регистрацией
+    function safeTimeout(fn, delay) {
+        const id = setTimeout(fn, delay);
+        registerTimer(id);
+        return id;
+    }
 
     // ==================== AUDIO ====================
     let audioCtx = null, drone = null, musicInterval = null;
@@ -239,35 +258,6 @@ document.addEventListener('DOMContentLoaded', function() {
         musicInterval = setInterval(playNote, 4000);
     }
     function stopMusic() { if (musicInterval) { clearInterval(musicInterval); musicInterval = null; } }
-
-    // ==================== MP3 PLAYER ====================
-    // Поддержка внешних MP3 (если положишь файлы в папку)
-    const MP3_FILES = {
-        ambient: 'audio/ambient.mp3',       // фоновая музыка
-        jumpscare: 'audio/jumpscare.mp3',   // jumpscare
-        heartbeat: 'audio/heartbeat.mp3',   // сердцебиение
-        whisper: 'audio/whisper.mp3',       // шёпот
-        message: 'audio/message.mp3'        // звук сообщения
-    };
-    const mp3Cache = {};
-
-    function playMP3(name, volume = 0.5, loop = false) {
-        const file = MP3_FILES[name];
-        if (!file) return null;
-        try {
-            if (loop && mp3Cache[name]) {
-                mp3Cache[name].volume = volume;
-                mp3Cache[name].play().catch(() => {});
-                return mp3Cache[name];
-            }
-            const audio = new Audio(file);
-            audio.volume = volume;
-            audio.loop = loop;
-            audio.play().catch(() => { /* файл не найден — используем WebAudio */ });
-            if (loop) mp3Cache[name] = audio;
-            return audio;
-        } catch (e) { return null; }
-    }
 
     // ==================== MIC ====================
     async function requestMic() {
@@ -466,11 +456,9 @@ document.addEventListener('DOMContentLoaded', function() {
             setTimeout(() => {
                 D.bootScreen.classList.add('hidden');
                 D.intro.classList.remove('hidden');
-                // Гарантия кликабельности
                 D.intro.style.pointerEvents = 'auto';
                 D.startBtn.disabled = false;
-                D.startBtn.focus();
-                console.log('[QIP] Intro показан, кнопки активны');
+                console.log('[QIP] Intro показан');
             }, 800);
         }, 3400);
     }
@@ -587,6 +575,7 @@ document.addEventListener('DOMContentLoaded', function() {
             state.correctAnswers = 0; state.totalQuestions = 0;
             state.gameTime = 0; state.sanity = 100;
             state.inventory = new Set();
+            state.dialoguePlayed = {};
         } else {
             state.act = state.save.act || 1;
             state.sceneIndex = state.save.scene || 0;
@@ -596,6 +585,7 @@ document.addEventListener('DOMContentLoaded', function() {
             state.sanity = state.save.sanity ?? 100;
             state.inventory = new Set(state.save.inventory || []);
             state.currentRoom = state.save.room || 'desk';
+            state.dialoguePlayed = state.save.dialoguePlayed || {};
         }
 
         initAudio();
@@ -638,13 +628,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ==================== SVG АВАТАРЫ ====================
-    function svgAvatar(type, color1 = '#9ab', color2 = '#567') {
+    function svgAvatar(type) {
         const svgs = {
-            admin: `<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><rect width="40" height="40" fill="${color1}"/><circle cx="20" cy="15" r="7" fill="${color2}"/><ellipse cx="20" cy="32" rx="12" ry="10" fill="${color2}"/></svg>`,
+            admin: `<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><rect width="40" height="40" fill="#9ab"/><circle cx="20" cy="15" r="7" fill="#567"/><ellipse cx="20" cy="32" rx="12" ry="10" fill="#567"/></svg>`,
             masha: `<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><rect width="40" height="40" fill="#f9c"/><circle cx="20" cy="15" r="7" fill="#c69"/><ellipse cx="20" cy="32" rx="12" ry="10" fill="#c69"/><circle cx="16" cy="14" r="1" fill="#000"/><circle cx="24" cy="14" r="1" fill="#000"/></svg>`,
             pavel: `<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><rect width="40" height="40" fill="#9cf"/><circle cx="20" cy="15" r="7" fill="#369"/><ellipse cx="20" cy="32" rx="12" ry="10" fill="#369"/></svg>`,
             unknown: `<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><rect width="40" height="40" fill="#200"/><text x="20" y="28" font-family="monospace" font-size="22" fill="#f22" text-anchor="middle" font-weight="bold">?</text></svg>`,
-            dead: `<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><rect width="40" height="40" fill="#111"/><text x="20" y="28" font-family="monospace" font-size="20" fill="#666" text-anchor="middle">💀</text></svg>`,
             olga: `<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><rect width="40" height="40" fill="#cba"/><circle cx="20" cy="15" r="7" fill="#865"/><ellipse cx="20" cy="32" rx="12" ry="10" fill="#865"/></svg>`,
             kate: `<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><rect width="40" height="40" fill="#fda"/><circle cx="20" cy="15" r="7" fill="#a75"/><ellipse cx="20" cy="32" rx="12" ry="10" fill="#a75"/></svg>`,
             max: `<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><rect width="40" height="40" fill="#aab"/><circle cx="20" cy="15" r="7" fill="#446"/><ellipse cx="20" cy="32" rx="12" ry="10" fill="#446"/></svg>`
@@ -692,24 +681,112 @@ document.addEventListener('DOMContentLoaded', function() {
         showNotification(`👤 Новый контакт: ${CONTACTS[id].name}`);
     }
 
+    // ==================== ФИКС: openChat без дублирования ====================
     function openChat(user, el) {
+        // Если кликнули на тот же контакт — ничего не делаем
+        if (state.currentUser === user) {
+            console.log('[QIP] Уже в чате с', user);
+            return;
+        }
+
+        // Отменяем ВСЕ таймеры старого диалога
+        cancelAllDialogueTimers();
+
         state.currentUser = user;
         $$('.contact').forEach(x => x.classList.remove('active'));
         if (el) el.classList.add('active');
         D.chatHeader.textContent = `Чат с ${CONTACTS[user].name}`;
         D.messages.innerHTML = '';
-        D.messageInput.disabled = false;
-        D.sendBtn.disabled = false;
-        setTimeout(() => { try { D.messageInput.focus(); } catch (e) {} }, 100);
-        if (state.dialogues[user]) {
-            state.dialogues[user].forEach(m => addMessage(m.text, m.type, false, false));
+
+        // Заблокировать ввод, если это закрытый контакт
+        const isLocked = CONTACTS[user] && CONTACTS[user].locked;
+        D.messageInput.disabled = isLocked;
+        D.sendBtn.disabled = isLocked;
+        D.messageInput.placeholder = isLocked ? 'Контакт недоступен...' : 'Введите сообщение...';
+
+        setTimeout(() => { try { if (!isLocked) D.messageInput.focus(); } catch (e) {} }, 100);
+
+        // Загружаем историю, ЕСЛИ ЕСТЬ
+        if (state.dialogues[user] && state.dialogues[user].length > 0) {
+            state.dialogues[user].forEach(m => addMessage(m.text, m.type, false, false, true));
+            console.log('[QIP] История для', user, 'загружена:', state.dialogues[user].length, 'сообщений');
         } else {
+            // Первый раз — создаём пустую историю
             state.dialogues[user] = [];
+            console.log('[QIP] Первый вход в чат с', user);
+
+            // Проиграть диалог ТОЛЬКО ОДИН РАЗ
+            if (!state.dialoguePlayed[user]) {
+                state.dialoguePlayed[user] = true;
+                state.save.dialoguePlayed = state.dialoguePlayed;
+                saveGame();
+                // Небольшая задержка, чтобы анимация открытия окна завершилась
+                safeTimeout(() => {
+                    if (state.currentUser === user) {
+                        playDialogue(user);
+                    }
+                }, 300);
+            }
         }
     }
 
-    // ==================== MESSAGES ====================
-    function addMessage(text, type = 'them', animate = true, sound = true) {
+    // ==================== DIALOGUES (для контактов) ====================
+    const DIALOGUES = {
+        admin: [
+            { delay: 800,  text: 'Привет. Ты новый тут? Не заходи в чат с ником "???".', type: 'them' },
+            { delay: 2800, text: 'Серьёзно. Если увидишь его в сети — сразу закрывай QIP.', type: 'them' },
+            { delay: 5200, text: 'Он уже забрал 3 моих контакта. Маша следующая.', type: 'them' },
+            { delay: 7800, text: 'Я чувствую, как он смотрит через экран...', type: 'them' },
+            { delay: 10500, text: 'Посмотри в "Мои фото". Там есть IMG_2013.jpg.', type: 'them' },
+            { delay: 13000, text: 'И прочитай notes.txt. Это важно.', type: 'them' }
+        ],
+        masha: [
+            { delay: 900,  text: 'приветик :) ты видел странные сообщения от ???', type: 'them' },
+            { delay: 3000, text: 'я зашла в его чат... и теперь у меня в комнате кто-то ходит', type: 'them' },
+            { delay: 5400, text: 'пожалуйста помоги мне', type: 'them' },
+            { delay: 7800, text: 'он за дверью', type: 'creepy' },
+            { delay: 10200, text: 'он смотрит на меня через экран', type: 'creepy' }
+        ],
+        pavel: [
+            { delay: 1000, text: 'Слушай, админ пропал.', type: 'them' },
+            { delay: 3000, text: 'Вчера писал мне ночью. Говорил "он среди нас".', type: 'them' },
+            { delay: 5500, text: 'Потом QIP сам закрылся. И статус админа стал "не в сети".', type: 'them' },
+            { delay: 8500, text: 'Ты можешь открыть его notes.txt?', type: 'them' }
+        ],
+        unknown: [
+            { delay: 400,  text: 'ты меня видишь?', type: 'creepy' },
+            { delay: 2200, text: 'я вижу тебя. вижу твою комнату.', type: 'creepy' },
+            { delay: 4200, text: 'обернись.', type: 'creepy' },
+            { delay: 6000, text: 'СЛИШКОМ ПОЗДНО.', type: 'creepy' }
+        ]
+    };
+
+    function playDialogue(user) {
+        const script = DIALOGUES[user];
+        if (!script) {
+            console.log('[QIP] Нет скрипта для', user);
+            return;
+        }
+        console.log('[QIP] Проигрываем диалог для', user);
+
+        script.forEach(line => {
+            safeTimeout(() => {
+                // Проверяем, что всё ещё в этом чате
+                if (state.currentUser !== user) {
+                    console.log('[QIP] Пропущено (не в чате):', line.text);
+                    return;
+                }
+                addMessage(line.text, line.type);
+                if (line.type === 'creepy') {
+                    triggerGlitch();
+                    whisperSound();
+                }
+            }, line.delay);
+        });
+    }
+
+    // ==================== ФИКС: addMessage с защитой от дублей ====================
+    function addMessage(text, type = 'them', animate = true, sound = true, fromHistory = false) {
         const div = document.createElement('div');
         div.className = `message ${type}`;
         if (!animate) div.style.animation = 'none';
@@ -717,11 +794,20 @@ document.addEventListener('DOMContentLoaded', function() {
         D.messages.appendChild(div);
         D.messages.scrollTop = D.messages.scrollHeight;
         if (sound && type !== 'system') messageSound();
-        if (state.currentUser) {
+
+        // Записываем в историю ТОЛЬКО новые сообщения (не при восстановлении)
+        if (!fromHistory && state.currentUser) {
             if (!state.dialogues[state.currentUser]) state.dialogues[state.currentUser] = [];
-            state.dialogues[state.currentUser].push({ text, type });
+            const hist = state.dialogues[state.currentUser];
+            const last = hist[hist.length - 1];
+            // Проверка на дубликат — только добавляем, если последнее отличается
+            if (!last || last.text !== text || last.type !== type) {
+                hist.push({ text, type });
+            }
         }
-        if (state.coopMode && state.coopChannel) {
+
+        // Кооп
+        if (state.coopMode && state.coopChannel && !fromHistory) {
             try {
                 state.coopChannel.postMessage({ type: 'message', text, msgType: type, sender: 'other' });
             } catch (e) {}
@@ -729,23 +815,31 @@ document.addEventListener('DOMContentLoaded', function() {
         return div;
     }
 
+    // ==================== ФИКС: sendMessage без спама ====================
     function sendMessage() {
         const text = D.messageInput.value.trim();
         if (!text || !state.currentUser) return;
+
+        const user = state.currentUser;
+        if (CONTACTS[user] && CONTACTS[user].locked) {
+            showNotification('❌ Контакт недоступен');
+            return;
+        }
+
         addMessage(text, 'me');
         D.messageInput.value = '';
 
-        const user = state.currentUser;
-
-        setTimeout(() => {
+        safeTimeout(() => {
+            if (state.currentUser !== user) return;
             const typing = document.createElement('div');
             typing.className = 'message typing';
             typing.textContent = 'печатает...';
             D.messages.appendChild(typing);
             D.messages.scrollTop = D.messages.scrollHeight;
 
-            setTimeout(() => {
-                typing.remove();
+            safeTimeout(() => {
+                if (typing.parentNode) typing.remove();
+                if (state.currentUser !== user) return;
                 const reply = getReply(user);
                 if (reply) {
                     addMessage(reply.text, reply.type);
@@ -773,12 +867,20 @@ document.addEventListener('DOMContentLoaded', function() {
         if (e.key === 'Enter') { e.preventDefault(); sendMessage(); }
     });
 
-    // ==================== SCRIPTS ====================
+    // ==================== ФИКС: playScript с отменой таймеров ====================
     async function playScript(script) {
+        // Отменяем все старые таймеры перед запуском нового скрипта
+        cancelAllDialogueTimers();
+
         const t0 = Date.now();
         const promises = script.map(async line => {
             const waitTime = line.delay - (Date.now() - t0);
-            if (waitTime > 0) await wait(waitTime);
+            if (waitTime > 0) {
+                await new Promise(resolve => {
+                    const id = setTimeout(resolve, waitTime);
+                    registerTimer(id);
+                });
+            }
             if (!state.gameStarted || state.paused) return;
             if (line.switchTo && state.currentUser !== line.switchTo) {
                 const c = document.querySelector(`[data-user="${line.switchTo}"]`);
@@ -1070,7 +1172,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const q = questions[i];
             if (state.currentUser !== 'unknown' && state.unknownUnlocked) {
                 const u = document.querySelector('[data-user="unknown"]');
-                if (u) u.click();
+                if (u && state.currentUser !== 'unknown') {
+                    // Открываем чат с ??? через открытый метод
+                    const isActive = u.classList.contains('active');
+                    if (!isActive) u.click();
+                }
             }
             await wait(500);
             addMessage(q.question, 'creepy');
@@ -1186,9 +1292,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!state.gameStarted) return;
         state.paused = true;
         await recordVoice(1000);
-        // Попробовать MP3, иначе WebAudio
-        const mp3 = playMP3('jumpscare', 0.8);
-        if (!mp3) scareSound();
+        scareSound();
         setTimeout(() => { if (state.recordedAudioURL) playRecordedVoice(); }, 300);
         flashScreen('red');
         D.jumpscare.classList.remove('hidden');
@@ -1207,8 +1311,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function jumpscareQuick() {
-        const mp3 = playMP3('jumpscare', 0.6);
-        if (!mp3) scareSound();
+        scareSound();
         flashScreen('red');
         D.jumpscare.classList.remove('hidden');
         setTimeout(() => D.jumpscare.classList.add('hidden'), 600);
@@ -1417,7 +1520,6 @@ document.addEventListener('DOMContentLoaded', function() {
     function renderDesktopIcons() {
         D.desktopIcons.innerHTML = '';
         DESKTOP_ICONS.forEach(icon => {
-            // Показываем иконки комнаты "desk" всегда, остальные — только в своей комнате
             const visible = icon.room === 'desk' || icon.room === state.currentRoom;
             if (!visible) return;
             const div = document.createElement('div');
@@ -1524,7 +1626,7 @@ P.S. В финале — не отвечай "да". Никогда.`;
         });
     }
 
-    // ==================== COOP (BroadcastChannel + Firebase) ====================
+    // ==================== COOP ====================
     function generateCoopCode() {
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
         let code = '';
@@ -1603,8 +1705,7 @@ P.S. В финале — не отвечай "да". Никогда.`;
         });
     }
 
-    // ==================== СОБЫТИЯ КНОПОК (ИСПРАВЛЕНО!) ====================
-    // Используем и click, и touchend для надёжности на мобильных
+    // ==================== КНОПКИ ====================
     function bindButton(btn, handler) {
         if (!btn) return;
         let touched = false;
@@ -1634,7 +1735,6 @@ P.S. В финале — не отвечай "да". Никогда.`;
 
     bindButton(D.micBtn, async (e) => {
         e.preventDefault();
-        console.log('[QIP] Клик по микрофону');
         await requestMic();
     });
 
@@ -1717,7 +1817,7 @@ P.S. В финале — не отвечай "да". Никогда.`;
         if (state.gameStarted && !state.paused) saveGame();
     });
 
-    // ==================== PWA INSTALL ====================
+    // ==================== PWA ====================
     let deferredPrompt = null;
     window.addEventListener('beforeinstallprompt', e => {
         e.preventDefault();
@@ -1735,7 +1835,6 @@ P.S. В финале — не отвечай "да". Никогда.`;
         deferredPrompt = null;
     });
 
-    // ==================== SERVICE WORKER ====================
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('sw.js').catch(() => {});
     }
