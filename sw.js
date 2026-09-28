@@ -1,5 +1,5 @@
 /* QIP 2012 Service Worker */
-const CACHE_NAME = 'qip2012-v1';
+const CACHE_NAME = 'qip2012-v3';
 const ASSETS = [
     './',
     './index.html',

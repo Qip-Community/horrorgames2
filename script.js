@@ -1,7 +1,9 @@
 'use strict';
 /* ============================================================
-   QIP 2012 — FIXED EDITION v2
+   QIP 2012 — FIXED EDITION v3
    ИСПРАВЛЕНО: обрыв диалогов при switchTo + дублирование
+   v3: полноценный кооп (хост/гость), синхронизация сообщений,
+       кнопка «Начать как хост», улучшенный BroadcastChannel
    ============================================================ */
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -65,6 +67,7 @@ document.addEventListener('DOMContentLoaded', function() {
         clockH: 22, clockM: 13, clockS: 0,
         currentRoom: 'desk',
         coopMode: false, coopCode: null, coopChannel: null,
+        coopIsHost: false, coopPlayers: new Set(),
         ambientTimer: null, eyesTimer: null,
         activeTimers: [],
         scriptActive: false
@@ -120,6 +123,7 @@ document.addEventListener('DOMContentLoaded', function() {
         coopModal: $('coop-modal'), coopCode: $('coop-code'),
         coopCopy: $('coop-copy'), coopInput: $('coop-input'),
         coopJoin: $('coop-join'), coopClose: $('coop-close'),
+        coopHostStart: $('coop-host-start'),
         roomView: $('room-view'), roomContent: $('room-content'),
         roomExit: $('room-exit'),
         desktopIcons: $('desktop-icons')
@@ -544,10 +548,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ==================== START ====================
-    async function startGame(continueMode = false, coopJoin = null) {
+    async function startGame(continueMode = false, coopCode = null, asHost = false) {
         if (state.gameStarted) return;
         state.gameStarted = true;
-        console.log('[QIP] startGame', { continueMode, coopJoin });
+        console.log('[QIP] startGame', { continueMode, coopCode, asHost });
 
         if (!continueMode) {
             state.save = { ...DEFAULT_SAVE,
@@ -603,7 +607,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setTimeout(() => runAct(1), 500);
         }
 
-        if (coopJoin) initCoop(coopJoin, false);
+        if (coopCode) initCoop(coopCode, asHost);
     }
 
     // ==================== SVG AVATARS ====================
@@ -724,9 +728,19 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        if (state.coopMode && state.coopChannel && !fromHistory) {
+        if (state.coopMode && state.coopChannel && !fromHistory && type !== 'system') {
             try {
-                state.coopChannel.postMessage({ type: 'message', text, msgType: type, sender: 'other' });
+                const myName = state.coopIsHost ? 'Хост' : 'Игрок 2';
+                // Не шлём чужие сообщения повторно (защита от эха)
+                if (type === 'me' || type === 'them' || type === 'creepy') {
+                    state.coopChannel.postMessage({
+                        type: 'message',
+                        text: text,
+                        msgType: type === 'me' ? 'me' : type,
+                        sender: myName,
+                        fromSelf: true
+                    });
+                }
             } catch (e) {}
         }
         return div;
@@ -1577,27 +1591,79 @@ P.S. В финале — не отвечай "да". Никогда.`;
     }
 
     function initCoop(code, asCreator) {
+        if (state.coopChannel) {
+            try { state.coopChannel.close(); } catch (e) {}
+            state.coopChannel = null;
+        }
         state.coopMode = true;
         state.coopCode = code;
+        state.coopIsHost = !!asCreator;
+        state.coopPlayers = new Set([asCreator ? 'Хост' : 'Игрок 2']);
+
         try {
             state.coopChannel = new BroadcastChannel('qip2012_coop_' + code);
             state.coopChannel.onmessage = e => {
                 const data = e.data;
+                if (!data || !data.type) return;
+
                 if (data.type === 'message') {
+                    // Игнорируем эхо собственных сообщений
+                    if (data.fromSelf && data.sender === (state.coopIsHost ? 'Хост' : 'Игрок 2')) return;
+
                     const div = document.createElement('div');
-                    div.className = `message ${data.msgType === 'me' ? 'coop-other' : 'them'}`;
-                    div.textContent = `[${data.sender}] ${data.text}`;
+                    if (data.msgType === 'me') {
+                        div.className = 'message coop-other';
+                        div.textContent = `[${data.sender}] ${data.text}`;
+                    } else if (data.msgType === 'creepy') {
+                        div.className = 'message creepy';
+                        div.textContent = data.text;
+                    } else {
+                        div.className = 'message them';
+                        div.textContent = `[${data.sender || '???'}] ${data.text}`;
+                    }
                     D.messages.appendChild(div);
                     D.messages.scrollTop = D.messages.scrollHeight;
+                    if (data.msgType !== 'system') messageSound();
                 } else if (data.type === 'hello') {
-                    D.hudCoop.classList.remove('hidden');
-                    D.coopList.innerHTML = `<div class="coop-player">Ты</div><div class="coop-player">${data.sender}</div>`;
+                    state.coopPlayers.add(data.sender);
+                    updateCoopHUD();
+                    // Отвечаем приветствием, чтобы второй тоже увидел нас
+                    try {
+                        state.coopChannel.postMessage({
+                            type: 'hello',
+                            sender: state.coopIsHost ? 'Хост' : 'Игрок 2'
+                        });
+                    } catch (err) {}
+                } else if (data.type === 'ping') {
+                    try {
+                        state.coopChannel.postMessage({
+                            type: 'pong',
+                            sender: state.coopIsHost ? 'Хост' : 'Игрок 2'
+                        });
+                    } catch (err) {}
                 }
             };
-            state.coopChannel.postMessage({ type: 'hello', sender: asCreator ? 'Создатель' : 'Игрок 2' });
+
+            // Приветствие
+            state.coopChannel.postMessage({
+                type: 'hello',
+                sender: asCreator ? 'Хост' : 'Игрок 2'
+            });
+            updateCoopHUD();
+            showNotification(asCreator ? '👥 Ты хост. Жди друга...' : '👥 Ты в кооп-сессии!');
         } catch (e) {
-            showNotification('❌ Кооп не поддерживается');
+            console.error('[QIP] Coop error', e);
+            showNotification('❌ Кооп не поддерживается в этом браузере');
+            state.coopMode = false;
         }
+    }
+
+    function updateCoopHUD() {
+        D.hudCoop.classList.remove('hidden');
+        const list = [...state.coopPlayers];
+        D.coopList.innerHTML = list.map(p =>
+            `<div class="coop-player">${p}${p === (state.coopIsHost ? 'Хост' : 'Игрок 2') ? ' (ты)' : ''}</div>`
+        ).join('');
     }
 
     // ==================== LEADERBOARD ====================
@@ -1688,25 +1754,49 @@ P.S. В финале — не отвечай "да". Никогда.`;
 
     bindButton(D.coopBtn, (e) => {
         e.preventDefault();
-        D.coopCode.textContent = generateCoopCode();
+        const code = generateCoopCode();
+        D.coopCode.textContent = code;
         D.coopModal.classList.remove('hidden');
+        // Предварительно не инициализируем — только при старте
     });
 
     bindButton(D.coopCopy, () => {
         const code = D.coopCode.textContent;
+        if (!code || code === '----') return;
         if (navigator.clipboard) {
             navigator.clipboard.writeText(code).then(() => {
                 D.coopCopy.textContent = '✅ Скопировано!';
                 setTimeout(() => { D.coopCopy.textContent = '📋 Скопировать'; }, 2000);
-            }).catch(() => {});
+            }).catch(() => {
+                // fallback
+                const ta = document.createElement('textarea');
+                ta.value = code;
+                document.body.appendChild(ta);
+                ta.select();
+                try { document.execCommand('copy'); } catch (e) {}
+                document.body.removeChild(ta);
+                D.coopCopy.textContent = '✅ Скопировано!';
+                setTimeout(() => { D.coopCopy.textContent = '📋 Скопировать'; }, 2000);
+            });
         }
+    });
+
+    bindButton(D.coopHostStart, (e) => {
+        e.preventDefault();
+        const code = D.coopCode.textContent;
+        if (!code || code === '----' || code.length < 4) {
+            showNotification('❌ Сначала сгенерируй код');
+            return;
+        }
+        D.coopModal.classList.add('hidden');
+        startGame(false, code, true); // asHost = true
     });
 
     bindButton(D.coopJoin, () => {
         const code = D.coopInput.value.trim().toUpperCase();
-        if (code.length < 4) { showNotification('❌ Введи код'); return; }
+        if (code.length < 4) { showNotification('❌ Введи код (минимум 4 символа)'); return; }
         D.coopModal.classList.add('hidden');
-        startGame(false, code);
+        startGame(false, code, false); // asHost = false
     });
 
     bindButton(D.coopClose, () => D.coopModal.classList.add('hidden'));
