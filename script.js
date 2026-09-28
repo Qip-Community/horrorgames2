@@ -1,9 +1,11 @@
 'use strict';
 /* ============================================================
-   QIP 2012 — FIXED EDITION v3
+   QIP 2012 — FIXED EDITION v4
    ИСПРАВЛЕНО: обрыв диалогов при switchTo + дублирование
    v3: полноценный кооп (хост/гость), синхронизация сообщений,
        кнопка «Начать как хост», улучшенный BroadcastChannel
+   v4: кооп через PeerJS (работает между разными устройствами
+       и GitHub Pages), улучшена стабильность подключения
    ============================================================ */
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -68,6 +70,7 @@ document.addEventListener('DOMContentLoaded', function() {
         currentRoom: 'desk',
         coopMode: false, coopCode: null, coopChannel: null,
         coopIsHost: false, coopPlayers: new Set(),
+        coopPeer: null, coopConn: null, coopConns: [],
         ambientTimer: null, eyesTimer: null,
         activeTimers: [],
         scriptActive: false
@@ -728,12 +731,11 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        if (state.coopMode && state.coopChannel && !fromHistory && type !== 'system') {
+        if (state.coopMode && !fromHistory && type !== 'system') {
             try {
                 const myName = state.coopIsHost ? 'Хост' : 'Игрок 2';
-                // Не шлём чужие сообщения повторно (защита от эха)
                 if (type === 'me' || type === 'them' || type === 'creepy') {
-                    state.coopChannel.postMessage({
+                    sendCoopMessage({
                         type: 'message',
                         text: text,
                         msgType: type === 'me' ? 'me' : type,
@@ -1582,7 +1584,7 @@ P.S. В финале — не отвечай "да". Никогда.`;
         });
     }
 
-    // ==================== COOP ====================
+    // ==================== COOP (PeerJS P2P) ====================
     function generateCoopCode() {
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
         let code = '';
@@ -1590,70 +1592,161 @@ P.S. В финале — не отвечай "да". Никогда.`;
         return code;
     }
 
+    function sendCoopMessage(data) {
+        if (!state.coopMode) return;
+        try {
+            if (state.coopConn && state.coopConn.open) {
+                state.coopConn.send(data);
+            }
+            // Host may have multiple connections
+            if (state.coopConns && state.coopConns.length) {
+                state.coopConns.forEach(c => {
+                    if (c && c.open) try { c.send(data); } catch (e) {}
+                });
+            }
+        } catch (e) {
+            console.warn('[QIP] sendCoop failed', e);
+        }
+    }
+
+    function handleCoopData(data) {
+        if (!data || !data.type) return;
+
+        if (data.type === 'message') {
+            // Ignore echo of our own messages
+            if (data.fromSelf && data.sender === (state.coopIsHost ? 'Хост' : 'Игрок 2')) return;
+
+            const div = document.createElement('div');
+            if (data.msgType === 'me') {
+                div.className = 'message coop-other';
+                div.textContent = `[${data.sender}] ${data.text}`;
+            } else if (data.msgType === 'creepy') {
+                div.className = 'message creepy';
+                div.textContent = data.text;
+            } else {
+                div.className = 'message them';
+                div.textContent = `[${data.sender || '???'}] ${data.text}`;
+            }
+            D.messages.appendChild(div);
+            D.messages.scrollTop = D.messages.scrollHeight;
+            if (data.msgType !== 'system') messageSound();
+        } else if (data.type === 'hello') {
+            state.coopPlayers.add(data.sender);
+            updateCoopHUD();
+            // Reply so the other side also sees us
+            sendCoopMessage({
+                type: 'hello',
+                sender: state.coopIsHost ? 'Хост' : 'Игрок 2'
+            });
+        } else if (data.type === 'ping') {
+            sendCoopMessage({
+                type: 'pong',
+                sender: state.coopIsHost ? 'Хост' : 'Игрок 2'
+            });
+        }
+    }
+
+    function setupConnHandlers(conn) {
+        conn.on('data', data => handleCoopData(data));
+        conn.on('open', () => {
+            console.log('[QIP] Coop connection open');
+            state.coopPlayers.add(state.coopIsHost ? 'Игрок 2' : 'Хост');
+            updateCoopHUD();
+            sendCoopMessage({
+                type: 'hello',
+                sender: state.coopIsHost ? 'Хост' : 'Игрок 2'
+            });
+            showNotification('👥 Друг подключился!');
+        });
+        conn.on('close', () => {
+            console.log('[QIP] Coop connection closed');
+            showNotification('👥 Связь с другом прервана');
+            // Keep mode on, allow reconnect attempts later if needed
+        });
+        conn.on('error', err => {
+            console.warn('[QIP] Coop conn error', err);
+        });
+    }
+
     function initCoop(code, asCreator) {
+        // Cleanup previous
+        if (state.coopPeer) {
+            try { state.coopPeer.destroy(); } catch (e) {}
+            state.coopPeer = null;
+        }
+        if (state.coopConn) {
+            try { state.coopConn.close(); } catch (e) {}
+            state.coopConn = null;
+        }
+        state.coopConns = [];
         if (state.coopChannel) {
             try { state.coopChannel.close(); } catch (e) {}
             state.coopChannel = null;
         }
+
+        if (typeof Peer === 'undefined') {
+            showNotification('❌ PeerJS не загрузился. Проверь интернет.');
+            console.error('[QIP] PeerJS not found');
+            return;
+        }
+
         state.coopMode = true;
         state.coopCode = code;
         state.coopIsHost = !!asCreator;
         state.coopPlayers = new Set([asCreator ? 'Хост' : 'Игрок 2']);
 
+        const peerId = 'qip2012-' + code.toUpperCase();
+        const peerOptions = {
+            host: '0.peerjs.com',
+            port: 443,
+            path: '/',
+            secure: true,
+            debug: 1
+        };
+
         try {
-            state.coopChannel = new BroadcastChannel('qip2012_coop_' + code);
-            state.coopChannel.onmessage = e => {
-                const data = e.data;
-                if (!data || !data.type) return;
-
-                if (data.type === 'message') {
-                    // Игнорируем эхо собственных сообщений
-                    if (data.fromSelf && data.sender === (state.coopIsHost ? 'Хост' : 'Игрок 2')) return;
-
-                    const div = document.createElement('div');
-                    if (data.msgType === 'me') {
-                        div.className = 'message coop-other';
-                        div.textContent = `[${data.sender}] ${data.text}`;
-                    } else if (data.msgType === 'creepy') {
-                        div.className = 'message creepy';
-                        div.textContent = data.text;
-                    } else {
-                        div.className = 'message them';
-                        div.textContent = `[${data.sender || '???'}] ${data.text}`;
-                    }
-                    D.messages.appendChild(div);
-                    D.messages.scrollTop = D.messages.scrollHeight;
-                    if (data.msgType !== 'system') messageSound();
-                } else if (data.type === 'hello') {
-                    state.coopPlayers.add(data.sender);
+            if (asCreator) {
+                // HOST
+                state.coopPeer = new Peer(peerId, peerOptions);
+                state.coopPeer.on('open', id => {
+                    console.log('[QIP] Host peer open:', id);
+                    showNotification('👥 Ты хост. Код: ' + code + '. Жди друга...');
                     updateCoopHUD();
-                    // Отвечаем приветствием, чтобы второй тоже увидел нас
-                    try {
-                        state.coopChannel.postMessage({
-                            type: 'hello',
-                            sender: state.coopIsHost ? 'Хост' : 'Игрок 2'
-                        });
-                    } catch (err) {}
-                } else if (data.type === 'ping') {
-                    try {
-                        state.coopChannel.postMessage({
-                            type: 'pong',
-                            sender: state.coopIsHost ? 'Хост' : 'Игрок 2'
-                        });
-                    } catch (err) {}
-                }
-            };
+                });
+                state.coopPeer.on('connection', conn => {
+                    console.log('[QIP] Incoming connection');
+                    state.coopConns.push(conn);
+                    state.coopConn = conn; // primary
+                    setupConnHandlers(conn);
+                });
+                state.coopPeer.on('error', err => {
+                    console.error('[QIP] Host peer error', err);
+                    if (err.type === 'unavailable-id') {
+                        showNotification('❌ Код уже занят. Сгенерируй новый.');
+                    } else {
+                        showNotification('❌ Ошибка хоста: ' + (err.message || err.type));
+                    }
+                });
+            } else {
+                // GUEST
+                state.coopPeer = new Peer(null, peerOptions); // random id
+                state.coopPeer.on('open', () => {
+                    console.log('[QIP] Guest peer open, connecting to', peerId);
+                    const conn = state.coopPeer.connect(peerId, { reliable: true });
+                    state.coopConn = conn;
+                    setupConnHandlers(conn);
+                    showNotification('👥 Подключаюсь к хосту...');
+                });
+                state.coopPeer.on('error', err => {
+                    console.error('[QIP] Guest peer error', err);
+                    showNotification('❌ Не удалось подключиться. Проверь код и что хост онлайн.');
+                });
+            }
 
-            // Приветствие
-            state.coopChannel.postMessage({
-                type: 'hello',
-                sender: asCreator ? 'Хост' : 'Игрок 2'
-            });
             updateCoopHUD();
-            showNotification(asCreator ? '👥 Ты хост. Жди друга...' : '👥 Ты в кооп-сессии!');
         } catch (e) {
-            console.error('[QIP] Coop error', e);
-            showNotification('❌ Кооп не поддерживается в этом браузере');
+            console.error('[QIP] Coop init error', e);
+            showNotification('❌ Кооп не удалось запустить');
             state.coopMode = false;
         }
     }
